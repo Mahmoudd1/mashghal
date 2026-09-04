@@ -1,0 +1,99 @@
+<div class="tab-toolbar">
+  @if (auth.isAdmin()) {
+    <button mat-flat-button (click)="addType()">
+      <mat-icon>add</mat-icon>
+      <span>{{ 'fabric.addType' | translate }}</span>
+    </button>
+  }
+  <span class="spacer"></span>
+</div>
+
+@if (fabrics.types.isLoading()) {
+  <mat-progress-bar mode="indeterminate" />
+}
+
+<mat-accordion multi>
+  @for (type of fabrics.types.value(); track type.id) {
+    <mat-expansion-panel [class.inactive-row]="!type.active">
+      <mat-expansion-panel-header>
+        <mat-panel-title>{{ type | localizedName }}</mat-panel-title>
+        <mat-panel-description>
+          {{ 'unit.' + type.unit | translate }} · {{ type.colors.length }}
+          {{ 'fabric.colors' | translate }}
+          @if (type.hasDerby) {
+            <span>· {{ 'fabric.hasDerby' | translate }}</span>
+          }
+          @if (!type.active) {
+            <span>· {{ 'common.inactive' | translate }}</span>
+          }
+        </mat-panel-description>
+      </mat-expansion-panel-header>
+
+      <p class="soft-warning">
+        <mat-icon inline>{{ type.hasDerby ? 'check_circle' : 'info' }}</mat-icon>
+        {{ (type.hasDerby ? 'fabric.derbyHint' : 'fabric.noDerby') | translate }}
+      </p>
+
+      @if (auth.isAdmin()) {
+        <div class="tab-toolbar">
+          @if (type.hasDerby) {
+            <button mat-stroked-button (click)="deleteDerby(type)">
+              <mat-icon>layers_clear</mat-icon>
+              <span>{{ 'fabric.deleteDerby' | translate }}</span>
+            </button>
+          } @else {
+            <button mat-stroked-button (click)="createDerby(type)">
+              <mat-icon>layers</mat-icon>
+              <span>{{ 'fabric.addDerby' | translate }}</span>
+            </button>
+          }
+          <button mat-stroked-button (click)="addColor(type)">
+            <mat-icon>palette</mat-icon>
+            <span>{{ 'fabric.addColor' | translate }}</span>
+          </button>
+          <span class="spacer"></span>
+          <button
+            mat-icon-button
+            [matTooltip]="'fabric.editType' | translate"
+            (click)="editType(type)"
+          >
+            <mat-icon>edit</mat-icon>
+          </button>
+          <button
+            mat-icon-button
+            [matTooltip]="'fabric.deleteType' | translate"
+            (click)="deleteType(type)"
+          >
+            <mat-icon>delete</mat-icon>
+          </button>
+        </div>
+      }
+
+      @if (type.colors.length === 0) {
+        <p class="empty-state">{{ 'fabric.noColors' | translate }}</p>
+      } @else {
+        <mat-chip-set>
+          @for (color of type.colors; track color.id) {
+            <mat-chip [class.inactive-row]="!color.active">
+              {{ color | localizedName }}
+              @if (auth.isAdmin()) {
+                <button matChipTrailingIcon class="chip-action" (click)="editColor(type, color)">
+                  <mat-icon inline>edit</mat-icon>
+                </button>
+              }
+              @if (auth.isAdmin()) {
+                <button matChipTrailingIcon class="chip-action" (click)="deleteColor(color)">
+                  <mat-icon inline>close</mat-icon>
+                </button>
+              }
+            </mat-chip>
+          }
+        </mat-chip-set>
+      }
+    </mat-expansion-panel>
+  } @empty {
+    @if (!fabrics.types.isLoading()) {
+      <p class="empty-state">{{ 'common.noData' | translate }}</p>
+    }
+  }
+</mat-accordion>

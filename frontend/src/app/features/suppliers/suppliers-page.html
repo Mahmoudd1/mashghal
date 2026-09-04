@@ -1,0 +1,182 @@
+<h1 class="page-title">{{ 'nav.suppliers' | translate }}</h1>
+
+<mat-tab-group>
+  <!-- What each fabric costs. Owner-only: the API refuses this data to anyone else. -->
+  @if (auth.isOwner()) {
+    <mat-tab [label]="'price.tab' | translate">
+      <ng-template matTabContent>
+        <div class="toolbar">
+          <mat-form-field appearance="outline" subscriptSizing="dynamic" class="filter-field">
+            <mat-label>{{ 'fabric.type' | translate }}</mat-label>
+            <mat-select
+              [value]="suppliers.priceFabricTypeId()"
+              (valueChange)="suppliers.priceFabricTypeId.set($event)"
+            >
+              <mat-option [value]="null">{{ 'common.all' | translate }}</mat-option>
+              @for (type of fabrics.types.value(); track type.id) {
+                <mat-option [value]="type.id">{{ type | localizedName }}</mat-option>
+              }
+            </mat-select>
+          </mat-form-field>
+
+          <mat-slide-toggle
+            [checked]="suppliers.bySupplier()"
+            (change)="suppliers.bySupplier.set($event.checked)"
+          >
+            {{ 'price.bySupplier' | translate }}
+          </mat-slide-toggle>
+
+          <span class="spacer"></span>
+          <span class="muted">{{ 'price.avgHint' | translate }}</span>
+        </div>
+
+        @if (suppliers.prices.isLoading()) {
+          <mat-progress-bar mode="indeterminate" />
+        }
+
+        <div class="table-scroll">
+          <table mat-table [dataSource]="suppliers.prices.value()">
+            <ng-container matColumnDef="fabric">
+              <th mat-header-cell *matHeaderCellDef>{{ 'fabric.type' | translate }}</th>
+              <td mat-cell *matCellDef="let r">{{ r.fabricTypeNameAr }}</td>
+            </ng-container>
+
+            <ng-container matColumnDef="supplier">
+              <th mat-header-cell *matHeaderCellDef>{{ 'supplier.label' | translate }}</th>
+              <td mat-cell *matCellDef="let r">
+                {{ r.supplierNameAr ?? ('supplier.unknown' | translate) }}
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="batches">
+              <th mat-header-cell *matHeaderCellDef>{{ 'price.batches' | translate }}</th>
+              <td mat-cell *matCellDef="let r" class="numeric">{{ r.batchCount }}</td>
+            </ng-container>
+
+            <ng-container matColumnDef="bought">
+              <th mat-header-cell *matHeaderCellDef>{{ 'price.totalBought' | translate }}</th>
+              <td mat-cell *matCellDef="let r" class="numeric">
+                {{ r.totalQuantity | number: '1.0-3' }} {{ 'unit.' + r.unit | translate }}
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="spent">
+              <th mat-header-cell *matHeaderCellDef>{{ 'price.totalSpent' | translate }}</th>
+              <td mat-cell *matCellDef="let r" class="numeric">
+                {{ r.totalCost | number: '1.0-2' }}
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="avg">
+              <th mat-header-cell *matHeaderCellDef>{{ 'price.avgPrice' | translate }}</th>
+              <td mat-cell *matCellDef="let r" class="numeric avg-price">
+                {{ r.averagePrice | number: '1.0-3' }}
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="range">
+              <th mat-header-cell *matHeaderCellDef>
+                {{ 'price.minPrice' | translate }} – {{ 'price.maxPrice' | translate }}
+              </th>
+              <td mat-cell *matCellDef="let r" class="numeric">
+                {{ r.minPrice | number: '1.0-3' }} – {{ r.maxPrice | number: '1.0-3' }}
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="latest">
+              <th mat-header-cell *matHeaderCellDef>{{ 'price.latestPrice' | translate }}</th>
+              <td mat-cell *matCellDef="let r" class="numeric">
+                @if (r.latestPrice !== null) {
+                  {{ r.latestPrice | number: '1.0-3' }}
+                  <span class="muted">{{ r.latestDate }}</span>
+                } @else {
+                  —
+                }
+              </td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="priceColumns()"></tr>
+            <tr mat-row *matRowDef="let r; columns: priceColumns()"></tr>
+          </table>
+        </div>
+
+        @if (!suppliers.prices.isLoading() && suppliers.prices.value().length === 0) {
+          <p class="empty-state">{{ 'common.noData' | translate }}</p>
+        }
+      </ng-template>
+    </mat-tab>
+  }
+
+  <!-- The suppliers themselves -->
+  <mat-tab [label]="'supplier.suppliers' | translate">
+    <ng-template matTabContent>
+      <div class="toolbar">
+        @if (auth.isAdmin()) {
+          <button mat-flat-button (click)="addSupplier()">
+            <mat-icon>person_add</mat-icon>
+            <span>{{ 'supplier.add' | translate }}</span>
+          </button>
+        }
+      </div>
+
+      @if (suppliers.suppliers.isLoading()) {
+        <mat-progress-bar mode="indeterminate" />
+      }
+
+      <div class="table-scroll">
+        <table mat-table [dataSource]="suppliers.suppliers.value()">
+          <ng-container matColumnDef="name">
+            <th mat-header-cell *matHeaderCellDef>{{ 'supplier.name' | translate }}</th>
+            <td mat-cell *matCellDef="let s" [class.inactive-row]="!s.active">
+              {{ s.nameAr }}
+              @if (s.nameEn) {
+                <span class="muted">{{ s.nameEn }}</span>
+              }
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="phone">
+            <th mat-header-cell *matHeaderCellDef>{{ 'supplier.phone' | translate }}</th>
+            <td mat-cell *matCellDef="let s" class="numeric">{{ s.phone ?? '—' }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="note">
+            <th mat-header-cell *matHeaderCellDef>{{ 'common.notes' | translate }}</th>
+            <td mat-cell *matCellDef="let s">{{ s.note ?? '—' }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="actions">
+            <th mat-header-cell *matHeaderCellDef class="row-actions">
+              {{ 'common.actions' | translate }}
+            </th>
+            <td mat-cell *matCellDef="let s" class="row-actions">
+              @if (auth.isAdmin()) {
+                <button
+                  mat-icon-button
+                  [matTooltip]="'supplier.edit' | translate"
+                  (click)="editSupplier(s)"
+                >
+                  <mat-icon>edit</mat-icon>
+                </button>
+                <button
+                  mat-icon-button
+                  [matTooltip]="'supplier.delete' | translate"
+                  (click)="deleteSupplier(s)"
+                >
+                  <mat-icon>delete</mat-icon>
+                </button>
+              }
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="supplierColumns"></tr>
+          <tr mat-row *matRowDef="let s; columns: supplierColumns"></tr>
+        </table>
+      </div>
+
+      @if (!suppliers.suppliers.isLoading() && suppliers.suppliers.value().length === 0) {
+        <p class="empty-state">{{ 'common.noData' | translate }}</p>
+      }
+    </ng-template>
+  </mat-tab>
+</mat-tab-group>

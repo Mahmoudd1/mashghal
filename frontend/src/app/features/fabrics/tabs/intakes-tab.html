@@ -1,0 +1,190 @@
+<div class="tab-toolbar">
+  @if (auth.isAdmin()) {
+    <button mat-flat-button (click)="addIntake()">
+      <mat-icon>add_shopping_cart</mat-icon>
+      <span>{{ 'fabric.addIntake' | translate }}</span>
+    </button>
+  }
+
+  <mat-form-field appearance="outline" subscriptSizing="dynamic" class="filter-field">
+    <mat-label>{{ 'fabric.type' | translate }}</mat-label>
+    <mat-select
+      [value]="fabrics.filters().fabricTypeId"
+      (valueChange)="fabrics.updateFilters({ fabricTypeId: $event })"
+    >
+      <mat-option [value]="null">{{ 'common.all' | translate }}</mat-option>
+      @for (type of fabrics.types.value(); track type.id) {
+        <mat-option [value]="type.id">{{ type | localizedName }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+
+  <mat-form-field appearance="outline" subscriptSizing="dynamic" class="filter-field">
+    <mat-label>{{ 'fabric.pool' | translate }}</mat-label>
+    <mat-select
+      [value]="fabrics.filters().pool"
+      (valueChange)="fabrics.updateFilters({ pool: $event })"
+    >
+      <mat-option [value]="null">{{ 'common.all' | translate }}</mat-option>
+      @for (pool of pools; track pool) {
+        <mat-option [value]="pool">
+          {{ (pool === 'DERBY' ? 'fabric.poolDerby' : 'fabric.poolRegular') | translate }}
+        </mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+
+  <mat-checkbox
+    [checked]="fabrics.filters().inStockOnly"
+    (change)="fabrics.updateFilters({ inStockOnly: $event.checked })"
+  >
+    {{ 'fabric.remaining' | translate }}
+  </mat-checkbox>
+</div>
+
+@if (fabrics.intakes.isLoading()) {
+  <mat-progress-bar mode="indeterminate" />
+}
+
+<mat-accordion multi>
+  @for (intake of fabrics.intakes.value().content; track intake.id) {
+    <mat-expansion-panel>
+      <mat-expansion-panel-header>
+        <mat-panel-title>
+          <span class="numeric">{{ intake.intakeDate | date: 'dd/MM/yyyy' }}</span>
+          <span>{{ intake.fabricTypeNameAr }}</span>
+          @if (intake.pool === 'DERBY') {
+            <mat-chip class="pool-chip">{{ 'fabric.poolDerby' | translate }}</mat-chip>
+          }
+        </mat-panel-title>
+        <mat-panel-description>
+          {{ intake.remainingRolls }} / {{ intake.totalRolls }}
+          {{ 'fabric.totalRolls' | translate }} · {{ intake.remainingQuantity | number: '1.0-3' }} /
+          {{ intake.totalQuantity | number: '1.0-3' }}
+          {{ 'unit.' + intake.unit | translate }}
+        </mat-panel-description>
+      </mat-expansion-panel-header>
+
+      <div class="intake-facts">
+        <span>
+          <span class="fact-label">{{ 'supplier.label' | translate }}</span>
+          <span>{{ intake.supplierNameAr ?? ('supplier.unknown' | translate) }}</span>
+        </span>
+        @if (auth.isOwner()) {
+          <span>
+            <span class="fact-label">{{ 'fabric.pricePerUnit' | translate }}</span>
+            <span class="numeric">
+              @if (intake.pricePerUnit !== null) {
+                {{ intake.pricePerUnit | number: '1.0-3' }} /
+                {{ 'unit.' + intake.unit | translate }}
+              } @else {
+                {{ 'fabric.priceNotSet' | translate }}
+              }
+            </span>
+          </span>
+          <span>
+            <span class="fact-label">{{ 'fabric.totalCost' | translate }}</span>
+            <span class="numeric">
+              {{ intake.totalCost !== null ? (intake.totalCost | number: '1.0-2') : '—' }}
+            </span>
+          </span>
+        }
+        <span>
+          <span class="fact-label">{{ 'fabric.consumed' | translate }}</span>
+          <span class="numeric">
+            {{ intake.consumedRolls }} {{ 'fabric.totalRolls' | translate }} ·
+            {{ intake.consumedQuantity | number: '1.0-3' }}
+          </span>
+        </span>
+      </div>
+
+      @if (intake.note) {
+        <p class="muted">{{ intake.note }}</p>
+      }
+
+      <!-- Advisory only: a partial or excess breakdown never blocks anything. -->
+      @if (intake.unassignedRolls > 0) {
+        <p class="soft-warning">
+          <mat-icon inline>info</mat-icon>
+          {{
+            'fabric.unassignedWarning'
+              | translate: { assigned: intake.assignedRolls, total: intake.totalRolls }
+          }}
+        </p>
+      }
+      @if (intake.overAssignedRolls > 0) {
+        <p class="soft-warning soft-warning-strong">
+          <mat-icon inline>warning</mat-icon>
+          {{
+            'fabric.overAssignedWarning'
+              | translate: { assigned: intake.assignedRolls, total: intake.totalRolls }
+          }}
+        </p>
+      }
+
+      <div class="tab-toolbar">
+        <h3 class="section-heading">{{ 'fabric.colorBreakdown' | translate }}</h3>
+        <span class="spacer"></span>
+        @if (auth.isAdmin()) {
+          <button mat-stroked-button (click)="assignColor(intake)">
+            <mat-icon>palette</mat-icon>
+            <span>{{ 'fabric.addColorBreakdown' | translate }}</span>
+          </button>
+          <button
+            mat-icon-button
+            [matTooltip]="'fabric.editIntake' | translate"
+            (click)="editIntake(intake)"
+          >
+            <mat-icon>edit</mat-icon>
+          </button>
+          <button
+            mat-icon-button
+            [matTooltip]="'fabric.deleteIntake' | translate"
+            (click)="deleteIntake(intake)"
+          >
+            <mat-icon>delete</mat-icon>
+          </button>
+        }
+      </div>
+
+      @if (intake.colorBreakdown.length === 0) {
+        <p class="empty-state">{{ 'fabric.noColorBreakdown' | translate }}</p>
+      } @else {
+        <mat-chip-set>
+          @for (row of intake.colorBreakdown; track row.id) {
+            <mat-chip>
+              {{ row.colorNameAr }}: {{ row.rollCount }}
+              @if (row.quantity) {
+                <span class="muted">&nbsp;({{ row.quantity | number: '1.0-3' }})</span>
+              }
+              <!-- One projectable node per @if: Material slots the trailing
+                   icons individually, and a block with two roots is skipped. -->
+              @if (auth.isAdmin()) {
+                <button matChipTrailingIcon class="chip-action" (click)="editColor(intake, row)">
+                  <mat-icon inline>edit</mat-icon>
+                </button>
+              }
+              @if (auth.isAdmin()) {
+                <button matChipTrailingIcon class="chip-action" (click)="removeColor(intake, row)">
+                  <mat-icon inline>close</mat-icon>
+                </button>
+              }
+            </mat-chip>
+          }
+        </mat-chip-set>
+      }
+    </mat-expansion-panel>
+  } @empty {
+    @if (!fabrics.intakes.isLoading()) {
+      <p class="empty-state">{{ 'common.noData' | translate }}</p>
+    }
+  }
+</mat-accordion>
+
+<mat-paginator
+  [length]="fabrics.intakes.value().page.totalElements"
+  [pageIndex]="fabrics.filters().pageIndex"
+  [pageSize]="fabrics.filters().pageSize"
+  [pageSizeOptions]="[10, 25, 50]"
+  (page)="onPage($event)"
+/>

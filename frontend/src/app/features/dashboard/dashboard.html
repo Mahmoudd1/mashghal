@@ -1,0 +1,185 @@
+<div class="dash-header">
+  <h1 class="page-title">{{ 'nav.dashboard' | translate }}</h1>
+  <span class="spacer"></span>
+  <button mat-stroked-button (click)="reload()">
+    <mat-icon>refresh</mat-icon>
+    <span>{{ 'common.search' | translate }}</span>
+  </button>
+</div>
+
+@if (reports.overview.isLoading()) {
+  <mat-progress-bar mode="indeterminate" />
+}
+
+@if (overview(); as data) {
+  <!-- Hero numbers: the four figures the floor asks about first. -->
+  <div class="stat-row">
+    <mat-card appearance="outlined">
+      <mat-card-content>
+        <span class="stat-label">{{ 'pipeline.planned' | translate }}</span>
+        <span class="stat-value">{{ data.plannedTotal }}</span>
+        <span class="stat-unit">{{ 'common.pieces' | translate }}</span>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card appearance="outlined">
+      <mat-card-content>
+        <span class="stat-label">{{ 'pipeline.inPipeline' | translate }}</span>
+        <span class="stat-value">{{ data.totalInPipeline }}</span>
+        <span class="stat-unit">{{ 'common.pieces' | translate }}</span>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card appearance="outlined">
+      <mat-card-content>
+        <span class="stat-label">{{ 'pipeline.flagged' | translate }}</span>
+        <span class="stat-value" [class.stat-critical]="data.flaggedTotal > 0">{{
+          data.flaggedTotal
+        }}</span>
+        <span class="stat-unit">{{ 'common.pieces' | translate }}</span>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card appearance="outlined">
+      <mat-card-content>
+        <span class="stat-label">{{ 'report.modelCount' | translate }}</span>
+        <span class="stat-value">{{ data.modelCount }}</span>
+        <span class="stat-unit">{{ 'nav.models' | translate }}</span>
+      </mat-card-content>
+    </mat-card>
+  </div>
+
+  <!-- Status carries an icon and a label, never colour alone. -->
+  @if (!data.reconciled) {
+    <p class="status-banner status-critical-banner">
+      <mat-icon inline>error</mat-icon>
+      <span
+        >{{ 'pipeline.notReconciled' | translate }} —
+        {{ 'pipeline.reconcileHint' | translate }}</span
+      >
+    </p>
+  }
+
+  <mat-card appearance="outlined" class="chart-card">
+    <mat-card-content>
+      <h2 class="chart-title">{{ 'report.allModels' | translate }}</h2>
+      <div class="stage-bar">
+        @for (segment of overallSegments(); track segment.code) {
+          <div
+            class="stage-segment"
+            [class]="stageClass(segment.code)"
+            [style.flex-grow]="segment.share"
+            [matTooltip]="('stage.' + segment.code | translate) + ': ' + segment.pieceCount"
+          ></div>
+        }
+      </div>
+      <div class="bar-labels">
+        @for (segment of overallSegments(); track segment.code) {
+          <span class="bar-label">
+            <span class="stage-swatch" [class]="stageClass(segment.code)"></span>
+            <span>{{ 'stage.' + segment.code | translate }}</span>
+            <strong class="bar-label-value">{{ segment.pieceCount }}</strong>
+          </span>
+        }
+      </div>
+
+      @for (branch of data.branches; track branch.branchId) {
+        <h2 class="chart-title">
+          {{ 'branch.' + branch.branchCode | translate }}
+          <span class="muted">
+            {{ 'pipeline.planned' | translate }}: {{ branch.plannedTotal }} ·
+            {{ 'report.modelCount' | translate }}: {{ branch.modelCount }}
+          </span>
+          @if (!branch.reconciled) {
+            <span class="status-chip">
+              <mat-icon inline>error</mat-icon>
+              {{ 'pipeline.notReconciled' | translate }}
+            </span>
+          }
+        </h2>
+        <div class="stage-bar">
+          @for (segment of segments(branch.stages); track segment.code) {
+            <div
+              class="stage-segment"
+              [class]="stageClass(segment.code)"
+              [style.flex-grow]="segment.share"
+              [matTooltip]="('stage.' + segment.code | translate) + ': ' + segment.pieceCount"
+            ></div>
+          }
+        </div>
+        <div class="bar-labels">
+          @for (segment of segments(branch.stages); track segment.code) {
+            <span class="bar-label">
+              <span class="stage-swatch" [class]="stageClass(segment.code)"></span>
+              <span>{{ 'stage.' + segment.code | translate }}</span>
+              <strong class="bar-label-value">{{ segment.pieceCount }}</strong>
+            </span>
+          }
+        </div>
+      }
+
+      <!-- Every bar above is readable as numbers here, so nothing is colour-only. -->
+      <button mat-button class="table-toggle" (click)="showTable.set(!showTable())">
+        <mat-icon>{{ showTable() ? 'expand_less' : 'table_rows' }}</mat-icon>
+        <span>{{ 'report.byStage' | translate }}</span>
+      </button>
+
+      @if (showTable()) {
+        <div class="table-scroll">
+          <table mat-table [dataSource]="stageOrder()">
+            <ng-container matColumnDef="stage">
+              <th mat-header-cell *matHeaderCellDef>{{ 'stage.label' | translate }}</th>
+              <td mat-cell *matCellDef="let row">
+                <span class="stage-swatch" [class]="stageClass(row.stageCode)"></span>
+                {{ 'stage.' + row.stageCode | translate }}
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="pieces">
+              <th mat-header-cell *matHeaderCellDef>{{ 'common.pieces' | translate }}</th>
+              <td mat-cell *matCellDef="let row" class="numeric">{{ row.pieceCount }}</td>
+            </ng-container>
+
+            <ng-container matColumnDef="flagged">
+              <th mat-header-cell *matHeaderCellDef>{{ 'pipeline.flagged' | translate }}</th>
+              <td mat-cell *matCellDef="let row" class="numeric">{{ row.flaggedCount || '—' }}</td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="['stage', 'pieces', 'flagged']"></tr>
+            <tr mat-row *matRowDef="let row; columns: ['stage', 'pieces', 'flagged']"></tr>
+          </table>
+        </div>
+      }
+    </mat-card-content>
+  </mat-card>
+
+  <div class="quick-links">
+    <mat-card appearance="outlined">
+      <mat-card-content>
+        <span class="stat-label">{{ 'report.tabs.fabric' | translate }}</span>
+        <span class="stat-value">
+          {{ fabricSummary().rollsInStock
+          }}<span class="stat-of">/{{ fabricSummary().totalRolls }}</span>
+        </span>
+        <span class="stat-unit">{{ 'fabric.remaining' | translate }}</span>
+        <a mat-button routerLink="/fabrics">{{ 'nav.fabrics' | translate }}</a>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card appearance="outlined">
+      <mat-card-content>
+        <span class="stat-label">{{ 'nav.pipeline' | translate }}</span>
+        <span class="stat-unit">{{ 'pipeline.receive' | translate }}</span>
+        <a mat-button routerLink="/pipeline">{{ 'nav.pipeline' | translate }}</a>
+      </mat-card-content>
+    </mat-card>
+
+    <mat-card appearance="outlined">
+      <mat-card-content>
+        <span class="stat-label">{{ 'nav.reports' | translate }}</span>
+        <span class="stat-unit">{{ 'report.tabs.flagged' | translate }}</span>
+        <a mat-button routerLink="/reports">{{ 'nav.reports' | translate }}</a>
+      </mat-card-content>
+    </mat-card>
+  </div>
+}

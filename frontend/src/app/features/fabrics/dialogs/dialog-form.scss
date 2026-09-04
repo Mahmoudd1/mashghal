@@ -1,0 +1,56 @@
+.dialog-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  min-width: min(22rem, 70vw);
+  padding-block-start: 0.5rem;
+}
+
+.allocation-warning {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+  margin: 0 0 0.75rem;
+  padding: 0.625rem 0.75rem;
+  border-radius: 0.5rem;
+  background: var(--mat-sys-tertiary-container);
+  color: var(--mat-sys-on-tertiary-container);
+  font: var(--mat-sys-body-small);
+}
+
+.action-context {
+  margin: 0 0 0.5rem;
+  font-weight: 600;
+}
+
+.action-hint {
+  margin: 0 0 0.75rem;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}
+
+.source-toggle {
+  margin-block-end: 0.75rem;
+}
+
+/* Says a new record is about to be created, before it happens. */
+.creating-hint {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  margin: -0.25rem 0 0.75rem;
+  color: var(--mat-sys-primary);
+  font: var(--mat-sys-body-small);
+}
+
+.option-hint {
+  margin-inline-start: 0.5rem;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}
+
+.dialog-section {
+  margin: 0.5rem 0 0.25rem;
+  font: var(--mat-sys-title-small);
+  color: var(--mat-sys-on-surface-variant);
+}

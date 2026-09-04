@@ -1,0 +1,107 @@
+// Include theming for Angular Material with `mat.theme()`.
+// This Sass mixin will define CSS variables that are used for styling Angular Material
+// components according to the Material 3 design spec.
+// Learn more about theming and how to use it for your application's
+// custom components at https://material.angular.dev/guide/theming
+@use '@angular/material' as mat;
+
+html {
+  height: 100%;
+  @include mat.theme(
+    (
+      color: (
+        primary: mat.$azure-palette,
+        tertiary: mat.$blue-palette,
+      ),
+      typography: Roboto,
+      density: 0,
+    )
+  );
+}
+
+body {
+  // Default the application to a light color theme. This can be changed to
+  // `dark` to enable the dark color theme, or to `light dark` to defer to the
+  // user's system settings.
+  color-scheme: light;
+
+  // Set a default background, font and text colors for the application using
+  // Angular Material's system-level CSS variables. Learn more about these
+  // variables at https://material.angular.dev/guide/system-variables
+  background-color: var(--mat-sys-surface);
+  color: var(--mat-sys-on-surface);
+  font: var(--mat-sys-body-medium);
+
+  // Reset the user agent margin.
+  margin: 0;
+  height: 100%;
+}
+/* You can add global styles to this file, and also import other style files */
+
+// Cairo carries the Arabic glyphs; Roboto covers Latin text and numerals.
+html {
+  font-family: 'Cairo', 'Roboto', 'Helvetica Neue', sans-serif;
+}
+
+// Material icons are ligature-based and must never be mirrored in RTL.
+.mat-icon,
+.material-icons {
+  direction: ltr;
+}
+
+.page-title {
+  margin: 0 0 1rem;
+  font: var(--mat-sys-headline-small);
+}
+
+// Wide tables scroll inside their own container instead of the page body.
+.table-scroll {
+  overflow-x: auto;
+}
+
+/*
+ * Pipeline stage ramp.
+ *
+ * The stages are ORDINAL — CUTTING → SEWING → RECEIVED → SOLD is a funnel, and
+ * reordering them would change the meaning — so they take a single-hue ramp that
+ * reads light-to-dark, not four unrelated hues. Steps 250/350/450/600 of the blue
+ * ramp; validated for monotone lightness, visible step gaps, single hue, and a
+ * light end that clears the Material surface at 2.01:1.
+ *
+ * The app renders light-only (see `color-scheme` above); a dark theme would need
+ * its own steps chosen against the dark surface, not an automatic flip.
+ */
+:root {
+  --stage-cutting: #86b6ef;
+  --stage-sewing: #5598e7;
+  --stage-received: #2a78d6;
+  --stage-sold: #184f95;
+
+  /* Reserved status colours — never reused for a stage. */
+  --status-critical: #d03b3b;
+  --status-warning: #fab219;
+}
+
+.stage-swatch {
+  display: inline-block;
+  inline-size: 0.75rem;
+  block-size: 0.75rem;
+  border-radius: 0.1875rem;
+  flex: 0 0 auto;
+}
+
+.stage-cutting {
+  background: var(--stage-cutting);
+}
+
+.stage-sewing {
+  background: var(--stage-sewing);
+}
+
+.stage-received {
+  background: var(--stage-received);
+}
+
+.stage-sold {
+  background: var(--stage-sold);
+}

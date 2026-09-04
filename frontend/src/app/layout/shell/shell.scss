@@ -1,0 +1,48 @@
+:host {
+  display: flex;
+  flex-direction: column;
+  height: 100vh;
+}
+
+.shell-toolbar {
+  position: sticky;
+  top: 0;
+  z-index: 10;
+  gap: 0.5rem;
+}
+
+.shell-title {
+  font: var(--mat-sys-title-medium);
+  white-space: nowrap;
+}
+
+.shell-spacer {
+  flex: 1 1 auto;
+}
+
+.shell-user-role {
+  padding: 0.25rem 1rem;
+  font: var(--mat-sys-label-small);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.shell-container {
+  flex: 1 1 auto;
+  min-height: 0;
+  background: var(--mat-sys-surface-container-low);
+}
+
+.shell-sidenav {
+  width: 16rem;
+  /* Logical border so the divider lands on the correct side in RTL and LTR. */
+  border-inline-end: 1px solid var(--mat-sys-outline-variant);
+}
+
+.shell-content {
+  padding: 1.5rem;
+}
+
+.active-nav-item {
+  --mat-list-list-item-container-color: var(--mat-sys-secondary-container);
+  font-weight: 600;
+}

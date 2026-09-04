@@ -1,0 +1,93 @@
+<h2 mat-dialog-title>{{ titleKey | translate }}</h2>
+
+<mat-dialog-content>
+  <p class="action-context">
+    {{ data.model.modelNumber }} · {{ 'branch.' + data.branch.branchCode | translate }}
+  </p>
+
+  <form [formGroup]="form" class="dialog-form">
+    @if (isMove) {
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'pipeline.fromStage' | translate }}</mat-label>
+        <mat-select formControlName="fromStageCode">
+          @for (stage of sourceStages; track stage.stageId) {
+            <mat-option [value]="stage.stageCode">
+              {{ 'stage.' + stage.stageCode | translate }} ({{ stage.pieceCount }})
+            </mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'pipeline.toStage' | translate }}</mat-label>
+        <mat-select formControlName="toStageCode">
+          @for (stage of allStages; track stage.stageId) {
+            <mat-option [value]="stage.stageCode">{{
+              'stage.' + stage.stageCode | translate
+            }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+    }
+
+    @if (isFlagging) {
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'stage.label' | translate }}</mat-label>
+        <mat-select formControlName="stageCode">
+          @for (stage of flaggableStages; track stage.stageId) {
+            <mat-option [value]="stage.stageCode">{{
+              'stage.' + stage.stageCode | translate
+            }}</mat-option>
+          }
+        </mat-select>
+        <mat-hint>{{ 'pipeline.flagStageHint' | translate }}</mat-hint>
+      </mat-form-field>
+    }
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'pipeline.quantity' | translate }}</mat-label>
+      <input
+        matInput
+        type="number"
+        min="1"
+        step="1"
+        [max]="maxQuantity()"
+        formControlName="quantity"
+        dir="ltr"
+      />
+      <mat-hint>{{ 'common.total' | translate }}: {{ maxQuantity() }}</mat-hint>
+    </mat-form-field>
+
+    @if (data.action === 'sell') {
+      <p class="action-hint">{{ 'pipeline.sellableHint' | translate }}</p>
+    }
+
+    @if (isFlagging) {
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'pipeline.reason' | translate }}</mat-label>
+        <textarea matInput rows="2" formControlName="reason"></textarea>
+      </mat-form-field>
+    }
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'pipeline.eventDate' | translate }}</mat-label>
+      <input matInput [matDatepicker]="picker" [max]="today" formControlName="date" />
+      <mat-datepicker-toggle matIconSuffix [for]="picker" />
+      <mat-datepicker #picker />
+    </mat-form-field>
+
+    @if (!isFlagging) {
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'common.notes' | translate }}</mat-label>
+        <textarea matInput rows="2" formControlName="note"></textarea>
+      </mat-form-field>
+    }
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="dialogRef.close()">{{ 'common.cancel' | translate }}</button>
+  <button mat-flat-button [disabled]="form.invalid || saving()" (click)="save()">
+    {{ 'common.save' | translate }}
+  </button>
+</mat-dialog-actions>

@@ -1,0 +1,54 @@
+# Full stack: database plus the application.
+#
+#   cp .env.example .env    # then fill it in
+#   docker compose up -d --build
+#
+# The app serves the UI and the API on one port, so there is nothing else to run.
+
+services:
+  postgres:
+    image: postgres:18-alpine
+    container_name: apparel-postgres
+    restart: unless-stopped
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-apparel}
+      POSTGRES_USER: ${POSTGRES_USER:-apparel}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      # Arabic data is stored as UTF-8; the collation only affects sort order.
+      POSTGRES_INITDB_ARGS: "--encoding=UTF8 --locale-provider=icu --icu-locale=ar-EG"
+    volumes:
+      - apparel-pgdata:/var/lib/postgresql/data
+    # Not published by default: only the app needs to reach it. Uncomment to
+    # connect with psql from the host.
+    # ports:
+    #   - "5432:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-apparel} -d ${POSTGRES_DB:-apparel}"]
+      interval: 5s
+      timeout: 5s
+      retries: 10
+
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: apparel-app
+    restart: unless-stopped
+    depends_on:
+      postgres:
+        condition: service_healthy
+    environment:
+      SPRING_PROFILES_ACTIVE: prod
+      DB_URL: jdbc:postgresql://postgres:5432/${POSTGRES_DB:-apparel}
+      DB_USERNAME: ${POSTGRES_USER:-apparel}
+      DB_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD in .env}
+      APP_JWT_SECRET: ${APP_JWT_SECRET:?set APP_JWT_SECRET in .env}
+      APP_JWT_TTL: ${APP_JWT_TTL:-PT12H}
+      APP_ADMIN_USERNAME: ${APP_ADMIN_USERNAME:-admin}
+      APP_ADMIN_PASSWORD: ${APP_ADMIN_PASSWORD:?set APP_ADMIN_PASSWORD in .env}
+      APP_LOG_LEVEL: ${APP_LOG_LEVEL:-INFO}
+    ports:
+      - "${APP_PORT:-8080}:8080"
+
+volumes:
+  apparel-pgdata:

@@ -1,0 +1,25 @@
+# Build output
+target/
+dist/
+*.class
+*.jar
+!**/.mvn/wrapper/maven-wrapper.jar
+
+# Node
+node_modules/
+.angular/
+npm-debug.log*
+
+# IDE
+.idea/
+*.iml
+.vscode/*
+!.vscode/extensions.json
+.DS_Store
+
+# Local environment
+.env
+.env.local
+
+# Deployment
+backend/src/main/resources/static/

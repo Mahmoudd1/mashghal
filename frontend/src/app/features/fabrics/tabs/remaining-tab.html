@@ -1,0 +1,76 @@
+<div class="tab-toolbar">
+  <mat-button-toggle-group
+    [value]="fabrics.remainingGrouping()"
+    (change)="fabrics.remainingGrouping.set($event.value)"
+    [attr.aria-label]="'fabric.groupBy' | translate"
+  >
+    @for (grouping of groupings; track grouping) {
+      <mat-button-toggle [value]="grouping">{{ labelFor(grouping) | translate }}</mat-button-toggle>
+    }
+  </mat-button-toggle-group>
+
+  <mat-form-field appearance="outline" subscriptSizing="dynamic" class="filter-field">
+    <mat-label>{{ 'fabric.type' | translate }}</mat-label>
+    <mat-select
+      [value]="fabrics.remainingFabricTypeId()"
+      (valueChange)="fabrics.remainingFabricTypeId.set($event)"
+    >
+      <mat-option [value]="null">{{ 'common.all' | translate }}</mat-option>
+      @for (type of fabrics.types.value(); track type.id) {
+        <mat-option [value]="type.id">{{ type | localizedName }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+</div>
+
+@if (fabrics.remaining.isLoading()) {
+  <mat-progress-bar mode="indeterminate" />
+}
+
+<div class="table-scroll">
+  <table mat-table [dataSource]="fabrics.remaining.value()">
+    <ng-container matColumnDef="fabric">
+      <th mat-header-cell *matHeaderCellDef>{{ 'fabric.type' | translate }}</th>
+      <td mat-cell *matCellDef="let r">{{ r.fabricTypeNameAr }}</td>
+    </ng-container>
+
+    <ng-container matColumnDef="date">
+      <th mat-header-cell *matHeaderCellDef>{{ 'fabric.intakeDate' | translate }}</th>
+      <td mat-cell *matCellDef="let r" class="numeric">{{ r.intakeDate }}</td>
+    </ng-container>
+
+    <ng-container matColumnDef="supplier">
+      <th mat-header-cell *matHeaderCellDef>{{ 'supplier.label' | translate }}</th>
+      <td mat-cell *matCellDef="let r">
+        {{ r.supplierNameAr ?? ('supplier.unknown' | translate) }}
+      </td>
+    </ng-container>
+
+    <ng-container matColumnDef="batches">
+      <th mat-header-cell *matHeaderCellDef>{{ 'fabric.batches' | translate }}</th>
+      <td mat-cell *matCellDef="let r" class="numeric">{{ r.batchCount }}</td>
+    </ng-container>
+
+    <ng-container matColumnDef="rolls">
+      <th mat-header-cell *matHeaderCellDef>{{ 'fabric.totalRolls' | translate }}</th>
+      <td mat-cell *matCellDef="let r" class="numeric">
+        <strong>{{ r.remainingRolls }}</strong> / {{ r.totalRolls }}
+      </td>
+    </ng-container>
+
+    <ng-container matColumnDef="quantity">
+      <th mat-header-cell *matHeaderCellDef>{{ 'fabric.remaining' | translate }}</th>
+      <td mat-cell *matCellDef="let r" class="numeric">
+        <strong>{{ r.remainingQuantity | number: '1.0-3' }}</strong>
+        / {{ r.totalQuantity | number: '1.0-3' }} {{ 'unit.' + r.unit | translate }}
+      </td>
+    </ng-container>
+
+    <tr mat-header-row *matHeaderRowDef="columns()"></tr>
+    <tr mat-row *matRowDef="let r; columns: columns()"></tr>
+  </table>
+</div>
+
+@if (!fabrics.remaining.isLoading() && fabrics.remaining.value().length === 0) {
+  <p class="empty-state">{{ 'common.noData' | translate }}</p>
+}

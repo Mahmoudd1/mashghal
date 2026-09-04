@@ -1,0 +1,31 @@
+.login-layout {
+  display: grid;
+  place-items: center;
+  min-height: 100vh;
+  padding: 1.5rem;
+  background: var(--mat-sys-surface-container-low);
+}
+
+.login-card {
+  width: min(24rem, 100%);
+}
+
+.login-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+}
+
+.login-form {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding-block-start: 0.5rem;
+}
+
+.login-error {
+  margin: 0 0 0.5rem;
+  color: var(--mat-sys-error);
+  font: var(--mat-sys-body-small);
+}

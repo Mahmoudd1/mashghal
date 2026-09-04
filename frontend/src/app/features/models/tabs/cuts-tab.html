@@ -1,0 +1,397 @@
+<div class="tab-toolbar">
+  @if (auth.isAdmin()) {
+    <button mat-flat-button (click)="addCut()">
+      <mat-icon>add</mat-icon>
+      <span>{{ 'cut.add' | translate }}</span>
+    </button>
+  }
+
+  <mat-form-field appearance="outline" subscriptSizing="dynamic" class="filter-field">
+    <mat-label>{{ 'cutType.label' | translate }}</mat-label>
+    <mat-select
+      [value]="production.cutFilters().cutType"
+      (valueChange)="production.updateCutFilters({ cutType: $event })"
+    >
+      <mat-option [value]="null">{{ 'common.all' | translate }}</mat-option>
+      @for (type of cutTypes; track type) {
+        <mat-option [value]="type">{{ 'cutType.' + type | translate }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+
+  <mat-form-field appearance="outline" subscriptSizing="dynamic" class="filter-field">
+    <mat-label>{{ 'branch.label' | translate }}</mat-label>
+    <mat-select
+      [value]="production.cutFilters().branchId"
+      (valueChange)="production.updateCutFilters({ branchId: $event })"
+    >
+      <mat-option [value]="null">{{ 'branch.all' | translate }}</mat-option>
+      @for (branch of reference.branches.value(); track branch.id) {
+        <mat-option [value]="branch.id">{{ branch | localizedName }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+
+  <mat-form-field appearance="outline" subscriptSizing="dynamic" class="filter-field">
+    <mat-label>{{ 'common.status' | translate }}</mat-label>
+    <mat-select
+      [value]="production.cutFilters().status"
+      (valueChange)="production.updateCutFilters({ status: $event })"
+    >
+      <mat-option [value]="null">{{ 'common.all' | translate }}</mat-option>
+      @for (status of statuses; track status) {
+        <mat-option [value]="status">{{ 'common.' + status.toLowerCase() | translate }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+
+  <mat-form-field appearance="outline" subscriptSizing="dynamic" class="filter-field">
+    <mat-label>{{ 'model.label' | translate }}</mat-label>
+    <mat-select
+      [value]="production.cutFilters().modelId"
+      (valueChange)="production.updateCutFilters({ modelId: $event })"
+    >
+      <mat-option [value]="null">{{ 'common.all' | translate }}</mat-option>
+      @for (model of production.models.value(); track model.id) {
+        <mat-option [value]="model.id">{{ model.modelNumber }}</mat-option>
+      }
+    </mat-select>
+  </mat-form-field>
+</div>
+
+<p class="muted count-line">
+  {{ 'cut.count' | translate }}: {{ production.cuts.value().page.totalElements }}
+</p>
+
+@if (production.cuts.isLoading()) {
+  <mat-progress-bar mode="indeterminate" />
+}
+
+<div class="table-scroll">
+  <table mat-table [dataSource]="production.cuts.value().content">
+    <ng-container matColumnDef="cutNumber">
+      <th mat-header-cell *matHeaderCellDef>{{ 'cut.number' | translate }}</th>
+      <td mat-cell *matCellDef="let cut" class="numeric">{{ cut.cutNumber }}</td>
+    </ng-container>
+
+    <ng-container matColumnDef="model">
+      <th mat-header-cell *matHeaderCellDef>{{ 'model.label' | translate }}</th>
+      <td mat-cell *matCellDef="let cut">
+        {{ cut.primaryModelNumber ?? ('common.none' | translate) }}
+      </td>
+    </ng-container>
+
+    <ng-container matColumnDef="cutType">
+      <th mat-header-cell *matHeaderCellDef>{{ 'cutType.label' | translate }}</th>
+      <td mat-cell *matCellDef="let cut">{{ 'cutType.' + cut.cutType | translate }}</td>
+    </ng-container>
+
+    <ng-container matColumnDef="parent">
+      <th mat-header-cell *matHeaderCellDef>{{ 'cut.parent' | translate }}</th>
+      <td mat-cell *matCellDef="let cut" class="numeric">
+        {{ cut.parentMainCutNumber ?? ('common.none' | translate) }}
+      </td>
+    </ng-container>
+
+    <ng-container matColumnDef="branch">
+      <th mat-header-cell *matHeaderCellDef>{{ 'cut.branch' | translate }}</th>
+      <td mat-cell *matCellDef="let cut">{{ 'branch.' + cut.branchCode | translate }}</td>
+    </ng-container>
+
+    <ng-container matColumnDef="date">
+      <th mat-header-cell *matHeaderCellDef>{{ 'cut.date' | translate }}</th>
+      <td mat-cell *matCellDef="let cut" class="numeric">{{ cut.cutDate | date: 'dd/MM/yyyy' }}</td>
+    </ng-container>
+
+    <ng-container matColumnDef="allocated">
+      <th mat-header-cell *matHeaderCellDef>{{ 'cut.totalAllocated' | translate }}</th>
+      <td mat-cell *matCellDef="let cut" class="numeric">{{ cut.totalAllocatedPieces }}</td>
+    </ng-container>
+
+    <ng-container matColumnDef="status">
+      <th mat-header-cell *matHeaderCellDef>{{ 'common.status' | translate }}</th>
+      <td mat-cell *matCellDef="let cut">
+        <mat-chip [class.chip-closed]="cut.status === 'CLOSED'">
+          {{ 'common.' + cut.status.toLowerCase() | translate }}
+        </mat-chip>
+      </td>
+    </ng-container>
+
+    <ng-container matColumnDef="actions">
+      <th mat-header-cell *matHeaderCellDef class="row-actions">
+        {{ 'common.actions' | translate }}
+      </th>
+      <td mat-cell *matCellDef="let cut" class="row-actions">
+        <button mat-icon-button [matTooltip]="'common.details' | translate" (click)="select(cut)">
+          <mat-icon>{{
+            production.selectedCutId() === cut.id ? 'expand_less' : 'expand_more'
+          }}</mat-icon>
+        </button>
+        @if (auth.isAdmin()) {
+          <button mat-icon-button [matTooltip]="'cut.edit' | translate" (click)="editCut(cut)">
+            <mat-icon>edit</mat-icon>
+          </button>
+          <button
+            mat-icon-button
+            [matTooltip]="(cut.status === 'OPEN' ? 'cut.close' : 'cut.reopen') | translate"
+            (click)="toggleStatus(cut)"
+          >
+            <mat-icon>{{ cut.status === 'OPEN' ? 'lock' : 'lock_open' }}</mat-icon>
+          </button>
+          <button mat-icon-button [matTooltip]="'cut.delete' | translate" (click)="deleteCut(cut)">
+            <mat-icon>delete</mat-icon>
+          </button>
+        }
+      </td>
+    </ng-container>
+
+    <tr mat-header-row *matHeaderRowDef="columns"></tr>
+    <tr mat-row *matRowDef="let row; columns: columns"></tr>
+  </table>
+</div>
+
+@if (!production.cuts.isLoading() && production.cuts.value().content.length === 0) {
+  <p class="empty-state">{{ 'common.noData' | translate }}</p>
+}
+
+<mat-paginator
+  [length]="production.cuts.value().page.totalElements"
+  [pageIndex]="production.cutFilters().pageIndex"
+  [pageSize]="production.cutFilters().pageSize"
+  [pageSizeOptions]="[10, 25, 50]"
+  (page)="onPage($event)"
+/>
+
+@if (production.selectedCut.value(); as cut) {
+  <section class="cut-detail">
+    <h2 class="section-heading">
+      {{ cut.cutNumber }} · {{ 'cutType.' + cut.cutType | translate }}
+    </h2>
+
+    @if (cut.status === 'CLOSED') {
+      <p class="allocation-warning">
+        <mat-icon inline>lock</mat-icon>
+        {{ 'cut.closedHint' | translate }}
+      </p>
+    }
+
+    <div class="tab-toolbar">
+      <h3 class="section-heading">{{ 'cut.modelAllocations' | translate }}</h3>
+      <span class="spacer"></span>
+      <button
+        mat-stroked-button
+        [disabled]="cut.status === 'CLOSED'"
+        (click)="allocateToModel(cut)"
+      >
+        <mat-icon>add</mat-icon>
+        <span>{{ 'cut.allocateModel' | translate }}</span>
+      </button>
+    </div>
+
+    @if (cut.modelAllocations.length === 0) {
+      <p class="empty-state">{{ 'cut.noModelAllocations' | translate }}</p>
+    } @else {
+      <ul class="allocation-list">
+        @for (allocation of cut.modelAllocations; track allocation.id) {
+          <li>
+            <strong>{{ allocation.modelNumber }}</strong> — {{ allocation.modelNameAr }} →
+            {{ 'branch.' + allocation.branchCode | translate }}: {{ allocation.quantityAllocated }}
+            {{ 'common.pieces' | translate }}
+            <button
+              mat-icon-button
+              [disabled]="cut.status === 'CLOSED'"
+              [matTooltip]="'common.edit' | translate"
+              (click)="editModelAllocation(cut, allocation)"
+            >
+              <mat-icon inline>edit</mat-icon>
+            </button>
+            <button
+              mat-icon-button
+              [disabled]="cut.status === 'CLOSED'"
+              [matTooltip]="'cut.removeAllocation' | translate"
+              (click)="removeModelAllocation(allocation)"
+            >
+              <mat-icon inline>close</mat-icon>
+            </button>
+          </li>
+        }
+      </ul>
+    }
+
+    <mat-divider />
+
+    <!-- Rolls: the consumption lifecycle lives here. -->
+    <div class="tab-toolbar">
+      <h3 class="section-heading">{{ 'cut.rolls' | translate }}</h3>
+      <span class="spacer"></span>
+      <button mat-stroked-button [disabled]="cut.status === 'CLOSED'" (click)="addRoll(cut)">
+        <mat-icon>add</mat-icon>
+        <span>{{ 'cut.addRoll' | translate }}</span>
+      </button>
+    </div>
+
+    @if (cut.rolls.length === 0) {
+      <p class="empty-state">{{ 'cut.noRolls' | translate }}</p>
+    } @else {
+      <ul class="allocation-list">
+        @for (roll of cut.rolls; track roll.id) {
+          <li>
+            <strong>{{ roll.rollLabel ?? '#' + roll.fabricRollId }}</strong>
+            <span class="muted">
+              — {{ roll.fabricTypeNameAr }}
+              @if (roll.colorNameAr) {
+                / {{ roll.colorNameAr }}
+              }
+              · {{ 'cut.fromBatch' | translate }} {{ roll.intakeDate }}
+            </span>
+            · {{ roll.layers }} {{ 'cut.layers' | translate }} · {{ roll.weightConsumed }}
+            {{ 'unit.' + roll.unit | translate }}
+            @if (roll.defectWeight) {
+              <span class="muted"
+                >({{ 'cut.defectWeight' | translate }}: {{ roll.defectWeight }})</span
+              >
+            }
+            @if (roll.done) {
+              <mat-chip class="chip-done">{{ 'cut.done' | translate }}</mat-chip>
+            } @else {
+              <mat-chip class="pool-chip">
+                {{ 'cut.openRoll' | translate }}: {{ roll.remainingAfter }}
+              </mat-chip>
+            }
+            <button
+              mat-icon-button
+              [disabled]="cut.status === 'CLOSED'"
+              [matTooltip]="'cut.editRoll' | translate"
+              (click)="editRoll(cut, roll)"
+            >
+              <mat-icon inline>edit</mat-icon>
+            </button>
+            <button
+              mat-icon-button
+              [disabled]="cut.status === 'CLOSED'"
+              [matTooltip]="'cut.removeRoll' | translate"
+              (click)="removeRoll(roll)"
+            >
+              <mat-icon inline>close</mat-icon>
+            </button>
+          </li>
+        }
+      </ul>
+
+      <div class="cut-facts">
+        <span>
+          <span class="fact-label">{{ 'cut.totalLayers' | translate }}</span>
+          <span class="numeric">{{ cut.totalLayers }}</span>
+        </span>
+        <span>
+          <span class="fact-label">{{ 'cut.weightConsumed' | translate }}</span>
+          <span class="numeric">{{ cut.totalWeightConsumed }}</span>
+        </span>
+        <span>
+          <span class="fact-label">{{ 'cut.defectPercentage' | translate }}</span>
+          <span class="numeric">{{ cut.defectPercentage }}%</span>
+        </span>
+        <span>
+          <span class="fact-label">{{ 'cut.weightPerPiece' | translate }}</span>
+          <span class="numeric">{{ cut.weightPerPiece }}</span>
+        </span>
+      </div>
+    }
+
+    <mat-divider />
+
+    <!-- The marker: piece counts derive from this, not from typed quantities. -->
+    <div class="tab-toolbar">
+      <h3 class="section-heading">{{ 'cut.marker' | translate }}</h3>
+      <span class="spacer"></span>
+      <button mat-stroked-button [disabled]="cut.status === 'CLOSED'" (click)="addSize(cut)">
+        <mat-icon>straighten</mat-icon>
+        <span>{{ 'cut.addMarker' | translate }}</span>
+      </button>
+    </div>
+
+    @if (cut.sizeBreakdown.length === 0) {
+      <p class="empty-state">{{ 'cut.noMarker' | translate }}</p>
+    } @else {
+      <p class="muted">{{ 'cut.derivedHint' | translate }}</p>
+      <ul class="allocation-list">
+        @for (row of cut.sizeBreakdown; track row.id) {
+          <li>
+            <strong>{{ row.modelNumber }}</strong>
+            · {{ 'size.label' | translate }} {{ row.sizeCode }}
+            <span class="muted">({{ row.categoryNameAr }})</span>
+            : {{ row.piecesPerLayer }} {{ 'cut.piecesPerLayer' | translate }} →
+            <strong>{{ row.totalPieces }}</strong> {{ 'common.pieces' | translate }}
+            @if (row.branchNameAr) {
+              <span class="muted">
+                → {{ row.branchNameAr }} ({{
+                  (row.branchOverridden ? 'cut.ownBranch' : 'cut.inheritsBranch') | translate
+                }})
+              </span>
+            }
+            <button
+              mat-icon-button
+              [disabled]="cut.status === 'CLOSED'"
+              [matTooltip]="'common.edit' | translate"
+              (click)="editSize(cut, row)"
+            >
+              <mat-icon inline>edit</mat-icon>
+            </button>
+            <button
+              mat-icon-button
+              [disabled]="cut.status === 'CLOSED'"
+              [matTooltip]="'common.delete' | translate"
+              (click)="removeSize(cut, row)"
+            >
+              <mat-icon inline>close</mat-icon>
+            </button>
+          </li>
+        }
+      </ul>
+    }
+
+    <!-- Derived against distributed: closing the cut requires these to agree. -->
+    @if (cut.modelTotals.length > 0) {
+      @if (cut.sizeBreakdown.length > 0) {
+        <p class="muted">{{ 'cut.derivedFromSizes' | translate }}</p>
+      }
+      <div class="table-scroll">
+        <table mat-table [dataSource]="cut.modelTotals">
+          <ng-container matColumnDef="model">
+            <th mat-header-cell *matHeaderCellDef>{{ 'model.label' | translate }}</th>
+            <td mat-cell *matCellDef="let r">{{ r.modelNumber }} — {{ r.modelNameAr }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="derived">
+            <th mat-header-cell *matHeaderCellDef>{{ 'cut.derivedPieces' | translate }}</th>
+            <td mat-cell *matCellDef="let r" class="numeric">{{ r.derivedPieces }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="allocated">
+            <th mat-header-cell *matHeaderCellDef>{{ 'cut.allocatedPieces' | translate }}</th>
+            <td mat-cell *matCellDef="let r" class="numeric">{{ r.allocatedPieces }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="balance">
+            <th mat-header-cell *matHeaderCellDef>{{ 'common.status' | translate }}</th>
+            <td mat-cell *matCellDef="let r">
+              @if (r.balanced) {
+                <span class="balance-ok"
+                  ><mat-icon inline>check</mat-icon> {{ 'cut.balanced' | translate }}</span
+                >
+              } @else {
+                <span class="balance-off">
+                  <mat-icon inline>error</mat-icon>
+                  {{ 'cut.unallocated' | translate }}: {{ r.unallocatedPieces }}
+                </span>
+              }
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="derivedColumns"></tr>
+          <tr mat-row *matRowDef="let r; columns: derivedColumns"></tr>
+        </table>
+      </div>
+    }
+  </section>
+}

@@ -1,0 +1,131 @@
+<h2 mat-dialog-title>{{ (data.intake ? 'fabric.editIntake' : 'fabric.addIntake') | translate }}</h2>
+
+<mat-dialog-content>
+  <form [formGroup]="form" class="dialog-form">
+    <!-- Typed, not picked: existing names are suggested, a new one is created. -->
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'fabric.type' | translate }}</mat-label>
+      <input
+        matInput
+        formControlName="fabricTypeName"
+        [matAutocomplete]="typeAuto"
+        autocomplete="off"
+      />
+      <mat-autocomplete #typeAuto="matAutocomplete">
+        @for (type of typeSuggestions(); track type.id) {
+          <mat-option [value]="type.nameAr">
+            {{ type.nameAr }}
+            <span class="option-hint">{{ 'unit.' + type.unit | translate }}</span>
+          </mat-option>
+        }
+      </mat-autocomplete>
+      @if (typeLocked) {
+        <mat-hint>{{ 'fabric.unitLockedHint' | translate }}</mat-hint>
+      }
+    </mat-form-field>
+
+    @if (creatingType()) {
+      <p class="creating-hint">
+        <mat-icon inline>add_circle</mat-icon>
+        {{ 'common.willCreate' | translate }}
+      </p>
+
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'unit.label' | translate }}</mat-label>
+        <mat-select formControlName="newTypeUnit">
+          @for (unit of units; track unit) {
+            <mat-option [value]="unit">{{ 'unit.' + unit | translate }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+    }
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'supplier.label' | translate }}</mat-label>
+      <input
+        matInput
+        formControlName="supplierName"
+        [matAutocomplete]="supplierAuto"
+        autocomplete="off"
+      />
+      <mat-autocomplete #supplierAuto="matAutocomplete">
+        @for (supplier of supplierSuggestions(); track supplier.id) {
+          <mat-option [value]="supplier.nameAr">{{ supplier.nameAr }}</mat-option>
+        }
+      </mat-autocomplete>
+      <mat-hint>{{ 'supplier.optionalHint' | translate }}</mat-hint>
+    </mat-form-field>
+
+    @if (creatingSupplier()) {
+      <p class="creating-hint">
+        <mat-icon inline>add_circle</mat-icon>
+        {{ 'common.willCreate' | translate }}
+      </p>
+    }
+
+    @if (canUseDerby()) {
+      <mat-checkbox formControlName="derbyPool">{{
+        'fabric.derbyPoolLabel' | translate
+      }}</mat-checkbox>
+    }
+    @if (poolLocked) {
+      <p class="action-hint">{{ 'errors.intake_pool_locked' | translate }}</p>
+    }
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'fabric.intakeDate' | translate }}</mat-label>
+      <input matInput [matDatepicker]="picker" [max]="today" formControlName="intakeDate" />
+      <mat-datepicker-toggle matIconSuffix [for]="picker" />
+      <mat-datepicker #picker />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'fabric.totalRolls' | translate }}</mat-label>
+      <input matInput type="number" min="1" step="1" formControlName="totalRolls" dir="ltr" />
+      @if (data.intake && data.intake.consumedRolls > 0) {
+        <mat-hint>{{ 'fabric.consumed' | translate }}: {{ data.intake.consumedRolls }}</mat-hint>
+      }
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'fabric.totalQuantity' | translate }}</mat-label>
+      <input
+        matInput
+        type="number"
+        step="0.001"
+        min="0"
+        formControlName="totalQuantity"
+        dir="ltr"
+      />
+      <span matTextSuffix>&nbsp;{{ 'unit.' + effectiveUnit() | translate }}</span>
+    </mat-form-field>
+
+    @if (auth.isOwner()) {
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'fabric.pricePerUnit' | translate }}</mat-label>
+        <input
+          matInput
+          type="number"
+          step="0.001"
+          min="0"
+          formControlName="pricePerUnit"
+          dir="ltr"
+        />
+        <span matTextSuffix>&nbsp;/ {{ 'unit.' + effectiveUnit() | translate }}</span>
+        <mat-hint>{{ 'fabric.priceOptionalHint' | translate }}</mat-hint>
+      </mat-form-field>
+    }
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'common.notes' | translate }}</mat-label>
+      <textarea matInput rows="2" formControlName="note"></textarea>
+    </mat-form-field>
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="dialogRef.close()">{{ 'common.cancel' | translate }}</button>
+  <button mat-flat-button [disabled]="form.invalid || saving()" (click)="save()">
+    {{ 'common.save' | translate }}
+  </button>
+</mat-dialog-actions>

@@ -1,0 +1,148 @@
+.tab-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding-block-end: 1rem;
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+.filter-field {
+  min-width: 12rem;
+}
+
+.model-card {
+  margin-block-end: 1.25rem;
+  padding: 1rem 1.25rem;
+  border: 1px solid var(--mat-sys-outline-variant);
+  border-radius: 0.75rem;
+  background: var(--mat-sys-surface);
+}
+
+.model-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-block-end: 0.75rem;
+}
+
+.model-header h2 {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin: 0;
+  font: var(--mat-sys-title-medium);
+}
+
+.model-number {
+  direction: ltr;
+  font-weight: 700;
+}
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  padding: 0.125rem 0.5rem;
+  border-radius: 1rem;
+  font: var(--mat-sys-label-small);
+}
+
+.badge-error {
+  background: var(--mat-sys-error-container);
+  color: var(--mat-sys-on-error-container);
+}
+
+.badge-warn {
+  background: var(--mat-sys-tertiary-container);
+  color: var(--mat-sys-on-tertiary-container);
+}
+
+.branch-block {
+  padding-block: 0.75rem;
+  border-block-start: 1px solid var(--mat-sys-outline-variant);
+}
+
+.branch-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  margin-block-end: 0.5rem;
+}
+
+.muted {
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}
+
+/*
+ * Proportional bar of where the pieces sit. Laid out with flex-direction:row so
+ * it fills from the start edge — which is the right-hand side under RTL, matching
+ * the reading order of the stage labels beneath it.
+ */
+.stage-bar {
+  display: flex;
+  /* 2px of surface between segments keeps each boundary visible. */
+  gap: 2px;
+  height: 0.625rem;
+  margin-block-end: 0.625rem;
+}
+
+.stage-segment {
+  height: 100%;
+  min-inline-size: 0.25rem;
+  border-radius: 4px;
+}
+
+/* Stage colours come from the shared ordinal ramp in styles.scss. */
+
+.stage-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(7rem, 1fr));
+  gap: 0.5rem;
+  margin-block-end: 0.75rem;
+}
+
+.stage-cell {
+  display: flex;
+  flex-direction: column;
+  gap: 0.125rem;
+  padding: 0.5rem 0.625rem;
+  border-radius: 0.5rem;
+  background: var(--mat-sys-surface-container-low);
+}
+
+.stage-name {
+  font: var(--mat-sys-label-small);
+  color: var(--mat-sys-on-surface-variant);
+}
+
+.stage-count {
+  direction: ltr;
+  text-align: start;
+  font: var(--mat-sys-title-medium);
+}
+
+.stage-flagged {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.25rem;
+  color: var(--mat-sys-error);
+  font: var(--mat-sys-label-small);
+}
+
+.branch-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.empty-state {
+  padding: 2rem;
+  text-align: center;
+  color: var(--mat-sys-on-surface-variant);
+}

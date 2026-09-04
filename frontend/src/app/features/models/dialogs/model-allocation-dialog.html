@@ -1,0 +1,57 @@
+<h2 mat-dialog-title>{{ 'cut.allocateModel' | translate }}</h2>
+
+<mat-dialog-content>
+  <form [formGroup]="form" class="dialog-form">
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'model.label' | translate }}</mat-label>
+      <mat-select formControlName="modelId">
+        @for (model of production.models.value(); track model.id) {
+          <mat-option [value]="model.id"
+            >{{ model.modelNumber }} — {{ model | localizedName }}</mat-option
+          >
+        }
+      </mat-select>
+    </mat-form-field>
+
+    @if (warnsMultipleMainCuts()) {
+      <p class="allocation-warning">
+        <mat-icon inline>info</mat-icon>
+        {{ 'model.multiMainCutWarning' | translate }}
+      </p>
+    }
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'branch.label' | translate }}</mat-label>
+      <mat-select formControlName="branchId">
+        @for (branch of reference.branches.value(); track branch.id) {
+          <mat-option [value]="branch.id">{{ branch | localizedName }}</mat-option>
+        }
+      </mat-select>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'cut.allocatedQuantity' | translate }}</mat-label>
+      <input
+        matInput
+        type="number"
+        min="1"
+        step="1"
+        formControlName="quantityAllocated"
+        dir="ltr"
+      />
+      <span matTextSuffix>&nbsp;{{ 'common.pieces' | translate }}</span>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'common.notes' | translate }}</mat-label>
+      <textarea matInput rows="2" formControlName="note"></textarea>
+    </mat-form-field>
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="dialogRef.close()">{{ 'common.cancel' | translate }}</button>
+  <button mat-flat-button [disabled]="form.invalid || saving()" (click)="save()">
+    {{ 'common.save' | translate }}
+  </button>
+</mat-dialog-actions>

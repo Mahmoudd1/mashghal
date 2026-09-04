@@ -1,0 +1,51 @@
+.toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 1rem;
+  padding-block: 1rem;
+}
+
+.spacer {
+  flex: 1 1 auto;
+}
+
+.filter-field {
+  min-width: 12rem;
+}
+
+table {
+  width: 100%;
+}
+
+.numeric {
+  direction: ltr;
+  text-align: start;
+  white-space: nowrap;
+}
+
+/* The figure the page exists to show. */
+.avg-price {
+  font-weight: 700;
+}
+
+.muted {
+  margin-inline-start: 0.375rem;
+  color: var(--mat-sys-on-surface-variant);
+  font: var(--mat-sys-body-small);
+}
+
+.row-actions {
+  white-space: nowrap;
+  text-align: end;
+}
+
+.inactive-row {
+  opacity: 0.55;
+}
+
+.empty-state {
+  padding: 2rem;
+  text-align: center;
+  color: var(--mat-sys-on-surface-variant);
+}

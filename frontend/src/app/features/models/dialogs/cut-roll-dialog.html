@@ -1,0 +1,135 @@
+<h2 mat-dialog-title>{{ (editing ? 'cut.editRoll' : 'cut.addRoll') | translate }}</h2>
+
+<mat-dialog-content>
+  <p class="action-context">
+    {{ data.cut.cutNumber }} · {{ 'cutType.' + data.cut.cutType | translate }}
+  </p>
+
+  @if (isDerbyCut) {
+    <p class="allocation-warning">
+      <mat-icon inline>layers</mat-icon>
+      {{ 'cut.derbyCutHint' | translate }}
+    </p>
+  }
+
+  <form [formGroup]="form" class="dialog-form">
+    @if (!editing) {
+      <mat-button-toggle-group
+        [value]="source()"
+        (change)="setSource($event.value)"
+        class="source-toggle"
+        [attr.aria-label]="'cut.rollSource' | translate"
+      >
+        <mat-button-toggle value="NEW">{{ 'cut.newFromBatch' | translate }}</mat-button-toggle>
+        <mat-button-toggle value="OPEN">{{ 'cut.existingOpen' | translate }}</mat-button-toggle>
+      </mat-button-toggle-group>
+    }
+
+    @if (!editing && source() === 'NEW') {
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'fabric.intake' | translate }}</mat-label>
+        <mat-select formControlName="fabricIntakeId">
+          @for (batch of batches.value().content; track batch.id) {
+            <mat-option [value]="batch.id">{{ batchLabel(batch) }}</mat-option>
+          }
+        </mat-select>
+        @if (batches.value().content.length === 0) {
+          <mat-hint>{{ 'common.noData' | translate }}</mat-hint>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'fabric.color' | translate }}</mat-label>
+        <input
+          matInput
+          formControlName="colorName"
+          [matAutocomplete]="colorAuto"
+          autocomplete="off"
+        />
+        <mat-autocomplete #colorAuto="matAutocomplete">
+          @for (color of colorSuggestions(); track color.id) {
+            <mat-option [value]="color.nameAr">{{ color.nameAr }}</mat-option>
+          }
+        </mat-autocomplete>
+      </mat-form-field>
+
+      @if (creatingColor()) {
+        <p class="creating-hint">
+          <mat-icon inline>add_circle</mat-icon>
+          {{ 'common.willCreate' | translate }}
+        </p>
+      }
+
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'cut.rollWeight' | translate }}</mat-label>
+        <input
+          matInput
+          type="number"
+          step="0.001"
+          min="0"
+          formControlName="initialWeight"
+          dir="ltr"
+        />
+        @if (selectedBatch(); as batch) {
+          <span matTextSuffix>&nbsp;{{ 'unit.' + batch.unit | translate }}</span>
+        }
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'fabric.label' | translate }}</mat-label>
+        <input matInput formControlName="rollLabel" />
+      </mat-form-field>
+    } @else {
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'cut.pickExistingRoll' | translate }}</mat-label>
+        <mat-select formControlName="fabricRollId">
+          @for (roll of openRolls.value(); track roll.id) {
+            <mat-option [value]="roll.id">{{ rollLabelFor(roll) }}</mat-option>
+          }
+        </mat-select>
+        @if (openRolls.value().length === 0) {
+          <mat-hint>{{ 'common.noData' | translate }}</mat-hint>
+        }
+      </mat-form-field>
+    }
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'cut.layers' | translate }}</mat-label>
+      <input matInput type="number" min="1" step="1" formControlName="layers" dir="ltr" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'cut.defectWeight' | translate }}</mat-label>
+      <input matInput type="number" step="0.001" min="0" formControlName="defectWeight" dir="ltr" />
+    </mat-form-field>
+
+    <mat-checkbox formControlName="done">{{ 'cut.done' | translate }}</mat-checkbox>
+
+    @if (asksUsedWeight()) {
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'cut.weightUsed' | translate }}</mat-label>
+        <input matInput type="number" step="0.001" min="0" formControlName="weightUsed" dir="ltr" />
+        <mat-hint>{{ 'cut.weightUsedHint' | translate }}</mat-hint>
+      </mat-form-field>
+    }
+
+    <!-- Calculated, never entered, and shown before saving. -->
+    @if (calculatedRemaining() !== null) {
+      <p class="action-hint">
+        {{ 'cut.calculatedRemaining' | translate }}: <strong>{{ calculatedRemaining() }}</strong>
+      </p>
+    }
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'common.notes' | translate }}</mat-label>
+      <textarea matInput rows="2" formControlName="note"></textarea>
+    </mat-form-field>
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="dialogRef.close()">{{ 'common.cancel' | translate }}</button>
+  <button mat-flat-button [disabled]="form.invalid || saving()" (click)="save()">
+    {{ 'common.save' | translate }}
+  </button>
+</mat-dialog-actions>

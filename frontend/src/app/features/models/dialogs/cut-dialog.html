@@ -1,0 +1,159 @@
+<h2 mat-dialog-title>{{ (data.cut ? 'cut.edit' : 'cut.add') | translate }}</h2>
+
+<mat-dialog-content>
+  <form [formGroup]="form" class="dialog-form">
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'cut.number' | translate }}</mat-label>
+      <input matInput formControlName="cutNumber" dir="ltr" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'cutType.label' | translate }}</mat-label>
+      <mat-select formControlName="cutType" (selectionChange)="onTypeChange()">
+        @for (type of cutTypes; track type) {
+          <mat-option [value]="type">{{ 'cutType.' + type | translate }}</mat-option>
+        }
+      </mat-select>
+      @if (typeLocked) {
+        <mat-hint>{{ 'errors.cut_type_immutable' | translate }}</mat-hint>
+      }
+    </mat-form-field>
+
+    @if (needsParent()) {
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'cut.parent' | translate }}</mat-label>
+        <mat-select formControlName="parentMainCutId">
+          @for (parent of parentOptions(); track parent.id) {
+            <mat-option [value]="parent.id">{{ parent.cutNumber }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+    }
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'cut.branch' | translate }}</mat-label>
+      <mat-select formControlName="branchId">
+        @for (branch of reference.branches.value(); track branch.id) {
+          <mat-option [value]="branch.id">{{ branch | localizedName }}</mat-option>
+        }
+      </mat-select>
+      <mat-hint>{{ 'cut.branchHint' | translate }}</mat-hint>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'cut.fabricType' | translate }}</mat-label>
+      <input
+        matInput
+        formControlName="fabricTypeName"
+        [matAutocomplete]="typeAuto"
+        autocomplete="off"
+      />
+      <mat-autocomplete #typeAuto="matAutocomplete">
+        @for (type of typeSuggestions(); track type.id) {
+          <mat-option [value]="type.nameAr">
+            {{ type.nameAr }}
+            <span class="option-hint">{{ 'unit.' + type.unit | translate }}</span>
+          </mat-option>
+        }
+      </mat-autocomplete>
+    </mat-form-field>
+
+    @if (creatingType()) {
+      <p class="creating-hint">
+        <mat-icon inline>add_circle</mat-icon>
+        {{ 'common.willCreate' | translate }}
+      </p>
+
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'unit.label' | translate }}</mat-label>
+        <mat-select formControlName="newTypeUnit">
+          @for (unit of units; track unit) {
+            <mat-option [value]="unit">{{ 'unit.' + unit | translate }}</mat-option>
+          }
+        </mat-select>
+      </mat-form-field>
+    }
+
+    <!-- The model is named here because opening a cut is normally where a
+         model first exists; a new number is created along with the cut. -->
+    <h3 class="dialog-section">{{ 'cut.modelSection' | translate }}</h3>
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'model.number' | translate }}</mat-label>
+      <input
+        matInput
+        formControlName="modelNumber"
+        [matAutocomplete]="modelAuto"
+        autocomplete="off"
+      />
+      <mat-autocomplete #modelAuto="matAutocomplete">
+        @for (model of modelSuggestions(); track model.id) {
+          <mat-option [value]="model.modelNumber">
+            {{ model.modelNumber }}
+            <span class="option-hint">{{ model.nameAr }}</span>
+          </mat-option>
+        }
+      </mat-autocomplete>
+      @if (matchedModel()) {
+        <mat-hint>{{ 'cut.modelExistsHint' | translate }}</mat-hint>
+      }
+    </mat-form-field>
+
+    @if (creatingModel()) {
+      <p class="creating-hint">
+        <mat-icon inline>add_circle</mat-icon>
+        {{ 'cut.modelCreatedHint' | translate }}
+      </p>
+
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'model.nameAr' | translate }}</mat-label>
+        <input matInput formControlName="modelNameAr" />
+      </mat-form-field>
+
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'model.sewingBranch' | translate }}</mat-label>
+        <mat-select formControlName="modelSewingBranchId">
+          <mat-option [value]="null">{{ 'cut.inheritsBranch' | translate }}</mat-option>
+          @for (branch of reference.branches.value(); track branch.id) {
+            <mat-option [value]="branch.id">{{ branch.nameAr }}</mat-option>
+          }
+        </mat-select>
+        <mat-hint>{{ 'model.sewingBranchHint' | translate }}</mat-hint>
+      </mat-form-field>
+    }
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'cut.date' | translate }}</mat-label>
+      <input matInput [matDatepicker]="picker" [max]="today" formControlName="cutDate" />
+      <mat-datepicker-toggle matIconSuffix [for]="picker" />
+      <mat-datepicker #picker />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'cut.cutLength' | translate }}</mat-label>
+      <input matInput type="number" step="0.001" min="0" formControlName="cutLength" dir="ltr" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'cut.modelDescription' | translate }}</mat-label>
+      <textarea matInput rows="2" formControlName="modelDescription"></textarea>
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'cut.label' | translate }}</mat-label>
+      <input matInput formControlName="labelAr" />
+    </mat-form-field>
+
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'common.notes' | translate }}</mat-label>
+      <textarea matInput rows="2" formControlName="note"></textarea>
+    </mat-form-field>
+  </form>
+</mat-dialog-content>
+
+<mat-dialog-actions align="end">
+  <button mat-button (click)="dialogRef.close()">{{ 'common.cancel' | translate }}</button>
+  <button mat-flat-button [disabled]="form.invalid || saving()" (click)="save()">
+    {{ 'common.save' | translate }}
+  </button>
+</mat-dialog-actions>

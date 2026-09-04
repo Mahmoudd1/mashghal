@@ -1,0 +1,402 @@
+<h1 class="page-title">{{ 'nav.reports' | translate }}</h1>
+
+<mat-tab-group>
+  <!-- All models and branches -->
+  <mat-tab [label]="'report.tabs.overview' | translate">
+    <ng-template matTabContent>
+      @if (reports.overview.isLoading()) {
+        <mat-progress-bar mode="indeterminate" />
+      }
+      @if (reports.overview.value(); as overview) {
+        <div class="stat-row">
+          <mat-card appearance="outlined">
+            <mat-card-content>
+              <span class="stat-label">{{ 'pipeline.planned' | translate }}</span>
+              <span class="stat-value">{{ overview.plannedTotal }}</span>
+            </mat-card-content>
+          </mat-card>
+          <mat-card appearance="outlined">
+            <mat-card-content>
+              <span class="stat-label">{{ 'pipeline.inPipeline' | translate }}</span>
+              <span class="stat-value">{{ overview.totalInPipeline }}</span>
+            </mat-card-content>
+          </mat-card>
+          <mat-card appearance="outlined">
+            <mat-card-content>
+              <span class="stat-label">{{ 'pipeline.flagged' | translate }}</span>
+              <span class="stat-value stat-flagged">{{ overview.flaggedTotal }}</span>
+            </mat-card-content>
+          </mat-card>
+          <mat-card appearance="outlined">
+            <mat-card-content>
+              <span class="stat-label">{{ 'report.modelCount' | translate }}</span>
+              <span class="stat-value">{{ overview.modelCount }}</span>
+            </mat-card-content>
+          </mat-card>
+        </div>
+
+        @if (!overview.reconciled) {
+          <p class="reconcile-warning">
+            <mat-icon inline>error</mat-icon>
+            {{ 'pipeline.notReconciled' | translate }} — {{ 'pipeline.reconcileHint' | translate }}
+          </p>
+        }
+
+        <h2 class="section-heading">
+          {{ 'report.byStage' | translate }} · {{ 'report.allModels' | translate }}
+        </h2>
+        <app-stage-totals-table [stages]="overview.stages" />
+
+        @for (branch of overview.branches; track branch.branchId) {
+          <h2 class="section-heading">
+            {{ 'branch.' + branch.branchCode | translate }}
+            <span class="muted">
+              — {{ 'pipeline.planned' | translate }}: {{ branch.plannedTotal }} ·
+              {{ 'report.modelCount' | translate }}: {{ branch.modelCount }}
+            </span>
+          </h2>
+          <app-stage-totals-table [stages]="branch.stages" />
+        }
+      }
+    </ng-template>
+  </mat-tab>
+
+  <!-- One branch across all its models -->
+  <mat-tab [label]="'report.tabs.branch' | translate">
+    <ng-template matTabContent>
+      <div class="filter-row">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="filter-field">
+          <mat-label>{{ 'branch.label' | translate }}</mat-label>
+          <mat-select
+            [value]="reports.selectedBranchId()"
+            (valueChange)="reports.selectedBranchId.set($event)"
+          >
+            @for (branch of reference.branches.value(); track branch.id) {
+              <mat-option [value]="branch.id">{{ branch | localizedName }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+      </div>
+
+      @if (reports.selectedBranchId() === null) {
+        <p class="empty-state">{{ 'branch.label' | translate }}…</p>
+      } @else if (reports.branchRollup.isLoading()) {
+        <mat-progress-bar mode="indeterminate" />
+      } @else if (reports.branchRollup.value(); as rollup) {
+        <div class="stat-row">
+          <mat-card appearance="outlined">
+            <mat-card-content>
+              <span class="stat-label">{{ 'pipeline.planned' | translate }}</span>
+              <span class="stat-value">{{ rollup.plannedTotal }}</span>
+            </mat-card-content>
+          </mat-card>
+          <mat-card appearance="outlined">
+            <mat-card-content>
+              <span class="stat-label">{{ 'pipeline.inPipeline' | translate }}</span>
+              <span class="stat-value">{{ rollup.totalInPipeline }}</span>
+            </mat-card-content>
+          </mat-card>
+          <mat-card appearance="outlined">
+            <mat-card-content>
+              <span class="stat-label">{{ 'pipeline.flagged' | translate }}</span>
+              <span class="stat-value stat-flagged">{{ rollup.flaggedTotal }}</span>
+            </mat-card-content>
+          </mat-card>
+          <mat-card appearance="outlined">
+            <mat-card-content>
+              <span class="stat-label">{{ 'report.modelCount' | translate }}</span>
+              <span class="stat-value">{{ rollup.modelCount }}</span>
+            </mat-card-content>
+          </mat-card>
+        </div>
+
+        <app-stage-totals-table [stages]="rollup.stages" />
+      }
+    </ng-template>
+  </mat-tab>
+
+  <!-- Flagged pieces -->
+  <mat-tab [label]="'report.tabs.flagged' | translate">
+    <ng-template matTabContent>
+      <div class="filter-row">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="filter-field">
+          <mat-label>{{ 'model.label' | translate }}</mat-label>
+          <mat-select
+            [value]="reports.flaggedModelId()"
+            (valueChange)="reports.flaggedModelId.set($event)"
+          >
+            <mat-option [value]="null">{{ 'common.all' | translate }}</mat-option>
+            @for (model of production.models.value(); track model.id) {
+              <mat-option [value]="model.id">{{ model.modelNumber }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="filter-field">
+          <mat-label>{{ 'branch.label' | translate }}</mat-label>
+          <mat-select
+            [value]="reports.flaggedBranchId()"
+            (valueChange)="reports.flaggedBranchId.set($event)"
+          >
+            <mat-option [value]="null">{{ 'branch.all' | translate }}</mat-option>
+            @for (branch of reference.branches.value(); track branch.id) {
+              <mat-option [value]="branch.id">{{ branch | localizedName }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+      </div>
+
+      @if (reports.flagged.isLoading()) {
+        <mat-progress-bar mode="indeterminate" />
+      }
+
+      <div class="table-scroll">
+        <table mat-table [dataSource]="reports.flagged.value()">
+          <ng-container matColumnDef="model">
+            <th mat-header-cell *matHeaderCellDef>{{ 'model.label' | translate }}</th>
+            <td mat-cell *matCellDef="let row">{{ row.modelNumber }} — {{ row.modelNameAr }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="branch">
+            <th mat-header-cell *matHeaderCellDef>{{ 'branch.label' | translate }}</th>
+            <td mat-cell *matCellDef="let row">{{ 'branch.' + row.branchCode | translate }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="stage">
+            <th mat-header-cell *matHeaderCellDef>{{ 'stage.label' | translate }}</th>
+            <td mat-cell *matCellDef="let row">{{ 'stage.' + row.stageCode | translate }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="flagged">
+            <th mat-header-cell *matHeaderCellDef>{{ 'pipeline.flagged' | translate }}</th>
+            <td mat-cell *matCellDef="let row" class="numeric stat-flagged">
+              {{ row.flaggedCount }}
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="of">
+            <th mat-header-cell *matHeaderCellDef>{{ 'common.total' | translate }}</th>
+            <td mat-cell *matCellDef="let row" class="numeric">{{ row.pieceCount }}</td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="flaggedColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: flaggedColumns"></tr>
+        </table>
+      </div>
+
+      @if (!reports.flagged.isLoading() && reports.flagged.value().length === 0) {
+        <p class="empty-state">{{ 'report.noFlagged' | translate }}</p>
+      }
+    </ng-template>
+  </mat-tab>
+
+  <!-- Fabric stock, per type and pool -->
+  <mat-tab [label]="'report.tabs.fabric' | translate">
+    <ng-template matTabContent>
+      @if (reports.fabricStock.isLoading()) {
+        <mat-progress-bar mode="indeterminate" />
+      }
+
+      <div class="table-scroll">
+        <table mat-table [dataSource]="reports.fabricStock.value()">
+          <ng-container matColumnDef="type">
+            <th mat-header-cell *matHeaderCellDef>{{ 'fabric.type' | translate }}</th>
+            <td mat-cell *matCellDef="let row">{{ typeName(row) }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="pool">
+            <th mat-header-cell *matHeaderCellDef>{{ 'fabric.pool' | translate }}</th>
+            <td mat-cell *matCellDef="let row">
+              {{ (row.pool === 'DERBY' ? 'fabric.poolDerby' : 'fabric.poolRegular') | translate }}
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="batches">
+            <th mat-header-cell *matHeaderCellDef>{{ 'fabric.batches' | translate }}</th>
+            <td mat-cell *matCellDef="let row" class="numeric">{{ row.batchCount }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="rolls">
+            <th mat-header-cell *matHeaderCellDef>{{ 'fabric.totalRolls' | translate }}</th>
+            <td mat-cell *matCellDef="let row" class="numeric">
+              {{ row.remainingRolls }} / {{ row.totalRolls }}
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="quantity">
+            <th mat-header-cell *matHeaderCellDef>{{ 'fabric.remaining' | translate }}</th>
+            <td mat-cell *matCellDef="let row" class="numeric">
+              {{ row.remainingQuantity | number: '1.0-3' }} /
+              {{ row.totalQuantity | number: '1.0-3' }}
+              {{ 'unit.' + row.unit | translate }}
+            </td>
+          </ng-container>
+
+          <!-- Only reached when stockColumns() includes 'cost', i.e. for the owner. -->
+          <ng-container matColumnDef="cost">
+            <th mat-header-cell *matHeaderCellDef>{{ 'fabric.totalCost' | translate }}</th>
+            <td mat-cell *matCellDef="let row" class="numeric">
+              {{ row.totalCost !== null ? (row.totalCost | number: '1.0-2') : '—' }}
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="stockColumns()"></tr>
+          <tr mat-row *matRowDef="let row; columns: stockColumns()"></tr>
+        </table>
+      </div>
+
+      @if (!reports.fabricStock.isLoading() && reports.fabricStock.value().length === 0) {
+        <p class="empty-state">{{ 'common.noData' | translate }}</p>
+      }
+    </ng-template>
+  </mat-tab>
+
+  <!-- Remaining rolls per intake date -->
+  <mat-tab [label]="'fabric.tabs.byDate' | translate">
+    <ng-template matTabContent>
+      @if (reports.fabricByDate.isLoading()) {
+        <mat-progress-bar mode="indeterminate" />
+      }
+
+      <div class="table-scroll">
+        <table mat-table [dataSource]="reports.fabricByDate.value()">
+          <ng-container matColumnDef="date">
+            <th mat-header-cell *matHeaderCellDef>{{ 'fabric.intakeDate' | translate }}</th>
+            <td mat-cell *matCellDef="let row" class="numeric">{{ row.intakeDate }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="type">
+            <th mat-header-cell *matHeaderCellDef>{{ 'fabric.type' | translate }}</th>
+            <td mat-cell *matCellDef="let row">{{ row.fabricTypeNameAr }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="pool">
+            <th mat-header-cell *matHeaderCellDef>{{ 'fabric.pool' | translate }}</th>
+            <td mat-cell *matCellDef="let row">
+              {{ (row.pool === 'DERBY' ? 'fabric.poolDerby' : 'fabric.poolRegular') | translate }}
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="rolls">
+            <th mat-header-cell *matHeaderCellDef>{{ 'fabric.totalRolls' | translate }}</th>
+            <td mat-cell *matCellDef="let row" class="numeric">
+              {{ row.remainingRolls }} / {{ row.totalRolls }}
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="quantity">
+            <th mat-header-cell *matHeaderCellDef>{{ 'fabric.remaining' | translate }}</th>
+            <td mat-cell *matCellDef="let row" class="numeric">
+              {{ row.remainingQuantity | number: '1.0-3' }} /
+              {{ row.totalQuantity | number: '1.0-3' }}
+              {{ 'unit.' + row.unit | translate }}
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="byDateColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: byDateColumns"></tr>
+        </table>
+      </div>
+
+      @if (!reports.fabricByDate.isLoading() && reports.fabricByDate.value().length === 0) {
+        <p class="empty-state">{{ 'common.noData' | translate }}</p>
+      }
+    </ng-template>
+  </mat-tab>
+
+  <!-- Rolls left part-used -->
+  <mat-tab [label]="'fabric.openRolls' | translate">
+    <ng-template matTabContent>
+      <p class="muted section-heading">{{ 'fabric.openRollsHint' | translate }}</p>
+
+      @if (reports.openRolls.isLoading()) {
+        <mat-progress-bar mode="indeterminate" />
+      }
+
+      <div class="table-scroll">
+        <table mat-table [dataSource]="reports.openRolls.value()">
+          <ng-container matColumnDef="type">
+            <th mat-header-cell *matHeaderCellDef>{{ 'fabric.type' | translate }}</th>
+            <td mat-cell *matCellDef="let row">{{ row.fabricTypeNameAr }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="color">
+            <th mat-header-cell *matHeaderCellDef>{{ 'fabric.color' | translate }}</th>
+            <td mat-cell *matCellDef="let row">
+              {{ row.colorNameAr ?? ('common.none' | translate) }}
+            </td>
+          </ng-container>
+
+          <ng-container matColumnDef="open">
+            <th mat-header-cell *matHeaderCellDef>{{ 'fabric.openRolls' | translate }}</th>
+            <td mat-cell *matCellDef="let row" class="numeric">{{ row.openRolls }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="remaining">
+            <th mat-header-cell *matHeaderCellDef>{{ 'fabric.remaining' | translate }}</th>
+            <td mat-cell *matCellDef="let row" class="numeric">
+              {{ row.remainingWeight | number: '1.0-3' }}
+            </td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="openRollColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: openRollColumns"></tr>
+        </table>
+      </div>
+
+      @if (!reports.openRolls.isLoading() && reports.openRolls.value().length === 0) {
+        <p class="empty-state">{{ 'common.noData' | translate }}</p>
+      }
+    </ng-template>
+  </mat-tab>
+
+  <!-- Models by size range -->
+  <mat-tab [label]="'size.categories' | translate">
+    <ng-template matTabContent>
+      <div class="filter-row">
+        <mat-form-field appearance="outline" subscriptSizing="dynamic" class="filter-field">
+          <mat-label>{{ 'size.category' | translate }}</mat-label>
+          <mat-select
+            [value]="sizes.categoryFilter()"
+            (valueChange)="sizes.categoryFilter.set($event)"
+          >
+            <mat-option [value]="null">{{ 'size.allCategories' | translate }}</mat-option>
+            @for (category of sizes.categories.value(); track category.id) {
+              <mat-option [value]="category.id">{{ category.nameAr }}</mat-option>
+            }
+          </mat-select>
+        </mat-form-field>
+      </div>
+
+      @if (sizes.modelsByCategory.isLoading()) {
+        <mat-progress-bar mode="indeterminate" />
+      }
+
+      <div class="table-scroll">
+        <table mat-table [dataSource]="sizes.modelsByCategory.value()">
+          <ng-container matColumnDef="model">
+            <th mat-header-cell *matHeaderCellDef>{{ 'model.label' | translate }}</th>
+            <td mat-cell *matCellDef="let row">{{ row.modelNumber }} — {{ row.modelNameAr }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="category">
+            <th mat-header-cell *matHeaderCellDef>{{ 'size.category' | translate }}</th>
+            <td mat-cell *matCellDef="let row">{{ row.categoryNameAr }}</td>
+          </ng-container>
+
+          <ng-container matColumnDef="perLayer">
+            <th mat-header-cell *matHeaderCellDef>{{ 'cut.piecesPerLayer' | translate }}</th>
+            <td mat-cell *matCellDef="let row" class="numeric">{{ row.piecesPerLayer }}</td>
+          </ng-container>
+
+          <tr mat-header-row *matHeaderRowDef="categoryModelColumns"></tr>
+          <tr mat-row *matRowDef="let row; columns: categoryModelColumns"></tr>
+        </table>
+      </div>
+
+      @if (!sizes.modelsByCategory.isLoading() && sizes.modelsByCategory.value().length === 0) {
+        <p class="empty-state">{{ 'size.noModels' | translate }}</p>
+      }
+    </ng-template>
+  </mat-tab>
+</mat-tab-group>

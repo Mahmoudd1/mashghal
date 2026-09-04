@@ -1,0 +1,100 @@
+<div class="tab-toolbar">
+  <button mat-stroked-button (click)="fabrics.stock.reload()">
+    <mat-icon>refresh</mat-icon>
+    <span>{{ 'common.search' | translate }}</span>
+  </button>
+</div>
+
+@if (fabrics.stock.isLoading()) {
+  <mat-progress-bar mode="indeterminate" />
+}
+
+@for (row of fabrics.stock.value(); track row.fabricTypeId + row.pool) {
+  <mat-card appearance="outlined" class="stock-card">
+    <mat-card-content>
+      <div class="stock-header">
+        <h2>{{ typeName(row) }}</h2>
+        <mat-chip [class.pool-chip]="row.pool === 'DERBY'">
+          {{ (row.pool === 'DERBY' ? 'fabric.poolDerby' : 'fabric.poolRegular') | translate }}
+        </mat-chip>
+        <span class="spacer"></span>
+        <span class="muted">{{ row.batchCount }} {{ 'fabric.batches' | translate }}</span>
+      </div>
+
+      <div class="stock-facts">
+        <span>
+          <span class="fact-label">{{ 'fabric.remaining' | translate }}</span>
+          <span class="numeric strong">{{ row.remainingRolls }} / {{ row.totalRolls }}</span>
+        </span>
+        <span>
+          <span class="fact-label">{{ 'fabric.totalQuantity' | translate }}</span>
+          <span class="numeric strong">
+            {{ row.remainingQuantity | number: '1.0-3' }} /
+            {{ row.totalQuantity | number: '1.0-3' }}
+            {{ 'unit.' + row.unit | translate }}
+          </span>
+        </span>
+        @if (auth.isOwner()) {
+          <span>
+            <span class="fact-label">{{ 'fabric.totalCost' | translate }}</span>
+            <span class="numeric strong">
+              {{ row.totalCost !== null ? (row.totalCost | number: '1.0-2') : '—' }}
+            </span>
+          </span>
+        }
+      </div>
+
+      @if (row.unassignedRolls > 0) {
+        <p class="soft-warning">
+          <mat-icon inline>info</mat-icon>
+          {{ 'fabric.unassigned' | translate }}: {{ row.unassignedRolls }}
+        </p>
+      }
+
+      @if (row.colors.length > 0) {
+        <div class="table-scroll">
+          <table mat-table [dataSource]="row.colors">
+            <ng-container matColumnDef="color">
+              <th mat-header-cell *matHeaderCellDef>{{ 'fabric.color' | translate }}</th>
+              <td mat-cell *matCellDef="let c">{{ c.colorNameAr }}</td>
+            </ng-container>
+
+            <ng-container matColumnDef="assigned">
+              <th mat-header-cell *matHeaderCellDef>{{ 'fabric.assigned' | translate }}</th>
+              <td mat-cell *matCellDef="let c" class="numeric">
+                {{ c.assignedRolls }}
+                @if (c.assignedQuantity) {
+                  <span class="muted">({{ c.assignedQuantity | number: '1.0-3' }})</span>
+                }
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="consumed">
+              <th mat-header-cell *matHeaderCellDef>{{ 'fabric.consumed' | translate }}</th>
+              <td mat-cell *matCellDef="let c" class="numeric">
+                {{ c.consumedRolls }}
+                @if (c.consumedQuantity) {
+                  <span class="muted">({{ c.consumedQuantity | number: '1.0-3' }})</span>
+                }
+              </td>
+            </ng-container>
+
+            <ng-container matColumnDef="remaining">
+              <th mat-header-cell *matHeaderCellDef>{{ 'fabric.remaining' | translate }}</th>
+              <td mat-cell *matCellDef="let c" class="numeric">
+                {{ c.assignedRolls - c.consumedRolls }}
+              </td>
+            </ng-container>
+
+            <tr mat-header-row *matHeaderRowDef="colorColumns"></tr>
+            <tr mat-row *matRowDef="let r; columns: colorColumns"></tr>
+          </table>
+        </div>
+      }
+    </mat-card-content>
+  </mat-card>
+} @empty {
+  @if (!fabrics.stock.isLoading()) {
+    <p class="empty-state">{{ 'common.noData' | translate }}</p>
+  }
+}

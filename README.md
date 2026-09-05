@@ -154,6 +154,24 @@ If a deployment still fails with `'url' must start with "jdbc"` and that line is
 **absent** from the log, the running build predates this conversion — the platform
 served a cached image rather than rebuilding.
 
+### Telling which build is running
+
+The very first line on start-up, before anything can fail, is the build's identity:
+
+```
+Build: version=0.0.1-SNAPSHOT commit=5c5c926 built=2026-09-05T16:05:49.546Z
+```
+
+A build timestamp older than your last push means the platform served a cached
+image; rebuild without cache rather than changing configuration. The commit is
+`unknown` unless the build passes one:
+
+```bash
+docker build --build-arg GIT_COMMIT=$(git rev-parse --short HEAD) .
+```
+
+The timestamp is always accurate, so it answers the question on its own.
+
 ### What the prod profile changes
 
 - API docs and Swagger UI **off**

@@ -15,6 +15,7 @@
 	<description>Apparel Manufacturing Tracking API</description>
 
 	<properties>
+		<git.commit>unknown</git.commit>
 		<java.version>25</java.version>
 		<springdoc.version>3.1.0</springdoc.version>
 		<frontend.dist>${project.basedir}/../frontend/dist/frontend/browser</frontend.dist>
@@ -166,6 +167,20 @@
 			<plugin>
 				<groupId>org.springframework.boot</groupId>
 				<artifactId>spring-boot-maven-plugin</artifactId>
+				<executions>
+					<execution>
+						<!-- Stamps build time and commit into the jar so a running
+						     container can say which build it actually is. -->
+						<goals>
+							<goal>build-info</goal>
+						</goals>
+						<configuration>
+							<additionalProperties>
+								<commit>${git.commit}</commit>
+							</additionalProperties>
+						</configuration>
+					</execution>
+				</executions>
 			</plugin>
 			<plugin>
 				<groupId>org.apache.maven.plugins</groupId>

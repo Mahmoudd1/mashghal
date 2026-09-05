@@ -24,7 +24,12 @@ RUN mvn -B -q dependency:go-offline
 COPY backend/src ./src
 # The built UI goes where Spring Boot serves static content from.
 COPY --from=frontend /build/dist/frontend/browser ./src/main/resources/static
-RUN mvn -B -q -DskipTests package
+
+# Stamped into the jar and printed on start-up, so a running container can be
+# matched to a commit. Platforms that expose the SHA can pass it through:
+#   docker build --build-arg GIT_COMMIT=$(git rev-parse --short HEAD) .
+ARG GIT_COMMIT=unknown
+RUN mvn -B -q -DskipTests package -Dgit.commit="$GIT_COMMIT"
 
 # ---- run ----------------------------------------------------------------------
 FROM eclipse-temurin:25-jre-alpine AS runtime

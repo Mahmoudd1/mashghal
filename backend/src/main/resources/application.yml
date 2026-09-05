@@ -43,6 +43,13 @@ server:
   port: ${SERVER_PORT:8080}
   error:
     include-message: always
+  # Model and pipeline listings return a whole collection; the JSON is highly
+  # repetitive and compresses ~60x, which is what keeps them cheap as the model
+  # count grows. On everywhere, not just prod, so development sees the same shape.
+  compression:
+    enabled: true
+    mime-types: application/json
+    min-response-size: 2KB
 
 management:
   endpoints:

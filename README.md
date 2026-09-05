@@ -267,6 +267,49 @@ complete record rather than a draft.
   (`--stage-*` in `styles.scss`), not four unrelated colours. Every bar is paired
   with labels and a table, so nothing depends on colour alone.
 
+## Scale
+
+Measured against PostgreSQL with **5,000 models and 5,000 cuts** (7,508 allocations,
+7,520 stage rows), best of three warm requests, gzipped as production serves them:
+
+| Endpoint | 1,000 each | 5,000 each | Sent (5,000) |
+| --- | --- | --- | --- |
+| `GET /api/models` | 13 ms | 55 ms | 50 KB |
+| `GET /api/cuts` | 12 ms | 14 ms | 1 KB |
+| `GET /api/pipeline/models` | 27 ms | 129 ms | 96 KB |
+| `GET /api/models/fabric-usage` | 9 ms | 17 ms | 9 KB |
+| `GET /api/reports/overview` | 6 ms | 11 ms | 0.5 KB |
+| `GET /api/intakes/stock` | 5 ms | 7 ms | 0.7 KB |
+
+A factory producing a few hundred cuts a year reaches 1,000 in several years, so
+these are comfortable numbers with room left over.
+
+What the measurements changed:
+
+- **`/api/pipeline/models` was an N+1** — it built each model's view with its own
+  queries, so 1,000 models meant thousands of round trips (1.18 s). It now loads
+  counts, allocations, branches and stages in five queries and assembles in memory:
+  **1.18 s → 27 ms**. Output is byte-identical to the per-model endpoint, which is
+  asserted against every model in the demo set.
+- **Responses are gzipped in every profile**, not just production. These listings are
+  repetitive JSON and compress about 60×; that is what keeps returning a whole
+  collection reasonable.
+- **The browser was the real limit, not the database.** The pipeline page rendered a
+  card per model — six Material buttons per branch, so 1,000 models meant ~12,000
+  button instances — and the models page rendered every expansion panel's body even
+  while collapsed. Panel bodies are now deferred (`matExpansionPanelContent`) and both
+  pages page client-side over the list they already hold (`shared/paging/client-page.ts`),
+  which caps the DOM without splitting the request. The pipeline page also gained a
+  model search, since paging through hundreds of cards to find one model is no way to
+  work.
+
+**Where it would need work beyond this.** Cuts and intakes already page server-side;
+models and pipeline hold the whole list in the browser, which is fine into the low tens
+of thousands and then wants server-side paging too. `ModelService.fabricUsagePerPiece()`
+loads consumption rows and filters in Java rather than SQL — cheap now, worth moving
+into the query if fabric history grows large. Nothing here is schema-deep: the indexes
+and foreign keys carry the load, and the fixes were all in how results are assembled.
+
 ## Build phases
 
 | Phase | Scope | Status |

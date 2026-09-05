@@ -13,7 +13,7 @@
 }
 
 <mat-accordion>
-  @for (model of production.models.value(); track model.id) {
+  @for (model of page.items(); track model.id) {
     <mat-expansion-panel
       [class.inactive-row]="!model.active"
       (opened)="onExpand(model)"
@@ -38,67 +38,71 @@
         </mat-panel-description>
       </mat-expansion-panel-header>
 
-      @if (model.drawsFromMultipleMainCuts) {
-        <p class="allocation-warning">
-          <mat-icon inline>info</mat-icon>
-          {{ 'model.multiMainCutWarning' | translate }}
-        </p>
-      }
+      <ng-template matExpansionPanelContent>
+        @if (model.drawsFromMultipleMainCuts) {
+          <p class="allocation-warning">
+            <mat-icon inline>info</mat-icon>
+            {{ 'model.multiMainCutWarning' | translate }}
+          </p>
+        }
 
-      <h3 class="section-heading">{{ 'model.plannedByBranch' | translate }}</h3>
-      @if (model.plannedByBranch.length === 0) {
-        <p class="empty-state">{{ 'model.noAllocations' | translate }}</p>
-      } @else {
-        <mat-chip-set>
-          @for (plan of model.plannedByBranch; track plan.branchId) {
-            <mat-chip>{{ 'branch.' + plan.branchCode | translate }}: {{ plan.quantity }}</mat-chip>
-          }
-        </mat-chip-set>
-      }
+        <h3 class="section-heading">{{ 'model.plannedByBranch' | translate }}</h3>
+        @if (model.plannedByBranch.length === 0) {
+          <p class="empty-state">{{ 'model.noAllocations' | translate }}</p>
+        } @else {
+          <mat-chip-set>
+            @for (plan of model.plannedByBranch; track plan.branchId) {
+              <mat-chip
+                >{{ 'branch.' + plan.branchCode | translate }}: {{ plan.quantity }}</mat-chip
+              >
+            }
+          </mat-chip-set>
+        }
 
-      <mat-divider />
+        <mat-divider />
 
-      <h3 class="section-heading">{{ 'model.feedingCuts' | translate }}</h3>
-      @if (production.modelCuts.isLoading()) {
-        <mat-progress-bar mode="indeterminate" />
-      } @else if (production.modelCuts.value(); as detail) {
-        @if (detail.modelId === model.id) {
-          @if (detail.allocations.length === 0) {
-            <p class="empty-state">{{ 'model.noAllocations' | translate }}</p>
-          } @else {
-            <ul class="allocation-list">
-              @for (allocation of detail.allocations; track allocation.id) {
-                <li>
-                  <strong>{{ allocation.cutNumber }}</strong>
-                  <span class="muted">({{ 'cutType.' + allocation.cutType | translate }})</span>
-                  → {{ 'branch.' + allocation.branchCode | translate }}:
-                  {{ allocation.quantityAllocated }} {{ 'common.pieces' | translate }}
-                </li>
-              }
-            </ul>
+        <h3 class="section-heading">{{ 'model.feedingCuts' | translate }}</h3>
+        @if (production.modelCuts.isLoading()) {
+          <mat-progress-bar mode="indeterminate" />
+        } @else if (production.modelCuts.value(); as detail) {
+          @if (detail.modelId === model.id) {
+            @if (detail.allocations.length === 0) {
+              <p class="empty-state">{{ 'model.noAllocations' | translate }}</p>
+            } @else {
+              <ul class="allocation-list">
+                @for (allocation of detail.allocations; track allocation.id) {
+                  <li>
+                    <strong>{{ allocation.cutNumber }}</strong>
+                    <span class="muted">({{ 'cutType.' + allocation.cutType | translate }})</span>
+                    → {{ 'branch.' + allocation.branchCode | translate }}:
+                    {{ allocation.quantityAllocated }} {{ 'common.pieces' | translate }}
+                  </li>
+                }
+              </ul>
+            }
           }
         }
-      }
 
-      @if (auth.isAdmin()) {
-        <div class="tab-toolbar">
-          <span class="spacer"></span>
-          <button
-            mat-icon-button
-            [matTooltip]="'model.edit' | translate"
-            (click)="editModel(model)"
-          >
-            <mat-icon>edit</mat-icon>
-          </button>
-          <button
-            mat-icon-button
-            [matTooltip]="'model.delete' | translate"
-            (click)="deleteModel(model)"
-          >
-            <mat-icon>delete</mat-icon>
-          </button>
-        </div>
-      }
+        @if (auth.isAdmin()) {
+          <div class="tab-toolbar">
+            <span class="spacer"></span>
+            <button
+              mat-icon-button
+              [matTooltip]="'model.edit' | translate"
+              (click)="editModel(model)"
+            >
+              <mat-icon>edit</mat-icon>
+            </button>
+            <button
+              mat-icon-button
+              [matTooltip]="'model.delete' | translate"
+              (click)="deleteModel(model)"
+            >
+              <mat-icon>delete</mat-icon>
+            </button>
+          </div>
+        }
+      </ng-template>
     </mat-expansion-panel>
   } @empty {
     @if (!production.models.isLoading()) {
@@ -106,3 +110,11 @@
     }
   }
 </mat-accordion>
+
+<mat-paginator
+  [length]="page.length()"
+  [pageIndex]="page.pageIndex()"
+  [pageSize]="page.pageSize()"
+  [pageSizeOptions]="[10, 25, 50]"
+  (page)="page.onPage($event)"
+/>

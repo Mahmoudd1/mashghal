@@ -11,6 +11,11 @@
     </mat-select>
   </mat-form-field>
 
+  <mat-form-field appearance="outline" subscriptSizing="dynamic" class="filter-field">
+    <mat-label>{{ 'common.search' | translate }}</mat-label>
+    <input matInput [value]="search()" (input)="search.set($any($event.target).value)" />
+  </mat-form-field>
+
   <span class="spacer"></span>
 
   <button mat-stroked-button (click)="pipeline.allModels.reload()">
@@ -23,7 +28,7 @@
   <mat-progress-bar mode="indeterminate" />
 }
 
-@for (model of models(); track model.modelId) {
+@for (model of page.items(); track model.modelId) {
   <section class="model-card">
     <header class="model-header">
       <h2>
@@ -118,3 +123,11 @@
     <p class="empty-state">{{ 'pipeline.noModels' | translate }}</p>
   }
 }
+
+<mat-paginator
+  [length]="page.length()"
+  [pageIndex]="page.pageIndex()"
+  [pageSize]="page.pageSize()"
+  [pageSizeOptions]="[10, 25, 50]"
+  (page)="page.onPage($event)"
+/>

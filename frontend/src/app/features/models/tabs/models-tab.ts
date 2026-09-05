@@ -5,6 +5,7 @@ import { MatDialog } from '@angular/material/dialog';
 import { MatDividerModule } from '@angular/material/divider';
 import { MatExpansionModule } from '@angular/material/expansion';
 import { MatIconModule } from '@angular/material/icon';
+import { MatPaginatorModule } from '@angular/material/paginator';
 import { MatProgressBarModule } from '@angular/material/progress-bar';
 import { MatTooltipModule } from '@angular/material/tooltip';
 import { TranslatePipe } from '@ngx-translate/core';
@@ -13,6 +14,7 @@ import { AuthService } from '../../../core/auth/auth.service';
 import { LocalizedNamePipe } from '../../../core/i18n/localized-name.pipe';
 import { ProductionModel } from '../../../core/models/api.models';
 import { ConfirmDialog, ConfirmDialogData } from '../../../shared/confirm-dialog/confirm-dialog';
+import { clientPage } from '../../../shared/paging/client-page';
 import { ModelDialog, ModelDialogData } from '../dialogs/model-dialog';
 import { ProductionService } from '../production.service';
 
@@ -29,6 +31,7 @@ import { ProductionService } from '../production.service';
     MatDividerModule,
     MatExpansionModule,
     MatIconModule,
+    MatPaginatorModule,
     MatProgressBarModule,
     MatTooltipModule,
     TranslatePipe,
@@ -41,6 +44,8 @@ export class ModelsTab {
   protected readonly production = inject(ProductionService);
   protected readonly auth = inject(AuthService);
   private readonly dialog = inject(MatDialog);
+
+  protected readonly page = clientPage(this.production.models.value);
 
   protected addModel(): void {
     this.dialog.open<ModelDialog, ModelDialogData, boolean>(ModelDialog, { data: {} });

@@ -3,6 +3,7 @@ package com.apparel.tracking.pipeline.service;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.Comparator;
+import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
 import java.util.stream.Collectors;
@@ -270,10 +271,99 @@ public class PipelineService {
                 branchRows);
     }
 
+    /**
+     * Every model's pipeline in five queries rather than five per model.
+     *
+     * <p>The single-model view can afford to fetch as it goes; doing the same in a
+     * loop turned this into thousands of round trips once the model count grew.
+     * Everything is loaded up front and assembled in memory instead.
+     */
     @Transactional(readOnly = true)
     public List<ModelPipelineDto> pipelineForAllModels() {
-        return models.findAllByOrderByModelNumberAsc().stream()
-                .map(model -> pipelineForModel(model.getId()))
+        List<Model> allModels = models.findAllByOrderByModelNumberAsc();
+        List<PipelineStage> activeStages = stages.findAllByActiveTrueOrderBySequenceNoAsc();
+
+        Map<Long, Branch> branchesById = branches.findAll().stream()
+                .collect(Collectors.toMap(Branch::getId, branch -> branch));
+
+        // model -> branch -> its stage rows
+        Map<Long, Map<Long, List<ModelBranchStageCount>>> countsByModel = counts.search(null, null).stream()
+                .collect(Collectors.groupingBy(
+                        count -> count.getModel().getId(),
+                        Collectors.groupingBy(count -> count.getBranch().getId())));
+
+        // model -> branch -> planned pieces
+        Map<Long, Map<Long, Long>> plannedByModel = new HashMap<>();
+        for (var row : allocations.plannedByModelAndBranch(null)) {
+            plannedByModel
+                    .computeIfAbsent(row.modelId(), key -> new HashMap<>())
+                    .merge(row.branchId(), row.plannedQuantity(), Long::sum);
+        }
+
+        return allModels.stream()
+                .map(model -> assemble(
+                        model,
+                        plannedByModel.getOrDefault(model.getId(), Map.of()),
+                        countsByModel.getOrDefault(model.getId(), Map.of()),
+                        branchesById,
+                        activeStages))
+                .toList();
+    }
+
+    /** Builds one model's view from data already in hand — no queries. */
+    private ModelPipelineDto assemble(
+            Model model,
+            Map<Long, Long> planned,
+            Map<Long, List<ModelBranchStageCount>> countsByBranch,
+            Map<Long, Branch> branchesById,
+            List<PipelineStage> activeStages) {
+
+        // A branch appears if it has a plan or any counts; either alone is enough.
+        List<Long> branchIds = new ArrayList<>(planned.keySet());
+        countsByBranch.keySet().forEach(id -> {
+            if (!branchIds.contains(id)) {
+                branchIds.add(id);
+            }
+        });
+
+        List<BranchPipelineDto> branchRows = branchIds.stream()
+                .map(branchId -> {
+                    Branch branch = branchesById.get(branchId);
+                    List<StageCountDto> stageRows =
+                            stageRows(countsByBranch.getOrDefault(branchId, List.of()), activeStages);
+                    long total = stageRows.stream().mapToLong(StageCountDto::pieceCount).sum();
+                    long flagged = stageRows.stream().mapToLong(StageCountDto::flaggedCount).sum();
+                    long plannedHere = planned.getOrDefault(branchId, 0L);
+
+                    return new BranchPipelineDto(
+                            branch.getId(), branch.getCode(), branch.getNameAr(), branch.getNameEn(),
+                            plannedHere, total, flagged, plannedHere == total, stageRows);
+                })
+                .sorted(Comparator.comparing(BranchPipelineDto::branchCode))
+                .toList();
+
+        long plannedTotal = branchRows.stream().mapToLong(BranchPipelineDto::plannedQuantity).sum();
+        long inPipeline = branchRows.stream().mapToLong(BranchPipelineDto::totalInPipeline).sum();
+        long flagged = branchRows.stream().mapToLong(BranchPipelineDto::flaggedTotal).sum();
+
+        return new ModelPipelineDto(
+                model.getId(), model.getModelNumber(), model.getNameAr(), model.getNameEn(),
+                plannedTotal, inPipeline, flagged, plannedTotal == inPipeline, branchRows);
+    }
+
+    /** Zero-fills every active stage against the rows a branch actually has. */
+    private List<StageCountDto> stageRows(List<ModelBranchStageCount> rows, List<PipelineStage> activeStages) {
+        Map<Long, ModelBranchStageCount> byStage = rows.stream()
+                .collect(Collectors.toMap(row -> row.getStage().getId(), row -> row));
+
+        return activeStages.stream()
+                .map(stage -> {
+                    ModelBranchStageCount row = byStage.get(stage.getId());
+                    return row != null
+                            ? StageCountDto.from(row)
+                            : new StageCountDto(stage.getId(), stage.getCode(), stage.getNameAr(),
+                                    stage.getNameEn(), stage.getSequenceNo(), 0, 0);
+                })
                 .toList();
     }
 

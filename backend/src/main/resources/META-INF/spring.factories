@@ -1,0 +1,3 @@
+# Boot 4 discovers EnvironmentPostProcessors here, not via a .imports file.
+org.springframework.boot.EnvironmentPostProcessor=\
+com.apparel.tracking.config.DatabaseUrlEnvironmentPostProcessor

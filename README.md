@@ -109,12 +109,36 @@ repository.
 
 | Variable | Notes |
 | --- | --- |
-| `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | Database connection |
+| `DB_URL`, `DB_USERNAME`, `DB_PASSWORD` | Database connection. `DB_URL` takes either form — see below |
 | `APP_JWT_SECRET` | Session signing key, **>= 32 bytes**. `openssl rand -base64 48` |
 | `APP_ADMIN_PASSWORD` | First account's password; rejected if left as `admin123` |
 | `APP_ADMIN_USERNAME` | Optional, defaults to `admin` |
 | `APP_JWT_TTL` | Optional, defaults to `PT12H` |
 | `APP_PORT` | Optional, host port in Compose; defaults to 8080 |
+
+### Database URL on a managed platform
+
+Railway, Render, Heroku, Neon and Supabase publish a connection string shaped like
+
+```
+postgresql://user:password@host:5432/dbname
+```
+
+JDBC will not accept that — the driver requires a `jdbc:` prefix, and pasting the
+platform's variable in verbatim fails at start-up with `'url' must start with "jdbc"`.
+The app therefore takes **either form** in `DB_URL` (and falls back to `DATABASE_URL`
+or `POSTGRES_URL` if `DB_URL` is unset), converting the URI to JDBC and splitting out
+the embedded credentials:
+
+```
+DB_URL=postgresql://user:password@host:5432/dbname     # platform's own string, works
+DB_URL=jdbc:postgresql://host:5432/dbname              # explicit JDBC, also works
+```
+
+`DB_USERNAME` / `DB_PASSWORD` set separately always win over credentials embedded in
+the URI, so an explicit override is never silently replaced. Query parameters survive
+the conversion, which is what keeps `?sslmode=require` working on a database reached
+over the public internet.
 
 ### What the prod profile changes
 

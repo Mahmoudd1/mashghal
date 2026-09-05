@@ -187,7 +187,22 @@ The timestamp is always accurate, so it answers the question on its own.
 ### First run
 
 An empty database migrates itself and creates one **OWNER** account from
-`APP_ADMIN_USERNAME` / `APP_ADMIN_PASSWORD`. Sign in and change the password. It is
+`APP_ADMIN_USERNAME` / `APP_ADMIN_PASSWORD`. Sign in and change the password.
+
+`APP_ADMIN_PASSWORD` is a **seed, not a setter**: it applies only while the user
+table is empty, so that a redeploy never quietly undoes a password changed through
+the UI. Once an account exists the variable is ignored, and start-up says so:
+
+```
+Skipping owner bootstrap: 1 user(s) already exist. APP_ADMIN_PASSWORD seeds only the
+very first account and has no effect now — change passwords through the Users screen.
+```
+
+If you are locked out, reset the hash directly rather than changing the variable:
+
+```sql
+update app_user set password_hash = '<bcrypt hash>' where username = 'admin';
+``` It is
 an owner because the person setting the system up is the one who should see purchase
 prices; add `ADMIN` and `DATA_ENTRY` users from the Users screen.
 

@@ -21,7 +21,9 @@ import org.springframework.transaction.annotation.Transactional;
  * the person setting the system up is the one who should see the money.
  *
  * <p>Runs only when there are no users at all, so it never resets a password
- * somebody has since changed.
+ * somebody has since changed. It logs when it skips for that reason: the variable
+ * looks like a password setter and is not one, and silence there is genuinely
+ * confusing to anyone deploying.
  */
 @Component
 // Must run before any other seeding: those create users of their own, and this
@@ -44,7 +46,14 @@ public class AdminBootstrap implements ApplicationRunner {
     @Override
     @Transactional
     public void run(ApplicationArguments args) {
-        if (users.count() > 0) {
+        long existing = users.count();
+        if (existing > 0) {
+            // Says so out loud, because the alternative is baffling: setting
+            // APP_ADMIN_PASSWORD on a system that already has users looks like it
+            // should change the password, and silently does nothing.
+            log.info("Skipping owner bootstrap: {} user(s) already exist. APP_ADMIN_PASSWORD seeds "
+                    + "only the very first account and has no effect now — change passwords through "
+                    + "the Users screen.", existing);
             return;
         }
 

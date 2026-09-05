@@ -17,6 +17,7 @@ import com.apparel.tracking.production.dto.CutModelAllocationDto;
 import com.apparel.tracking.production.dto.ModelCutsDto;
 import com.apparel.tracking.fabric.domain.FabricUnit;
 import com.apparel.tracking.production.dto.ModelDto;
+import com.apparel.tracking.production.domain.CutType;
 import com.apparel.tracking.production.dto.ModelFabricUsageDto;
 import com.apparel.tracking.production.dto.ModelRequest;
 import com.apparel.tracking.production.repository.CutModelAllocationRepository;
@@ -118,7 +119,9 @@ public class ModelService {
             modelNames.putIfAbsent((Long) row[1], new String[] {(String) row[2], (String) row[3]});
         }
 
-        record Key(Long modelId, Long fabricTypeId) {}
+        // Cut type joins the key so the main run is read apart from the secondary
+        // and derby runs that add to the same garment.
+        record Key(Long modelId, Long fabricTypeId, CutType cutType) {}
         Map<Key, BigDecimal> weight = new LinkedHashMap<>();
         Map<Key, Long> pieces = new LinkedHashMap<>();
         Map<Key, Set<Long>> cutsSeen = new LinkedHashMap<>();
@@ -126,9 +129,10 @@ public class ModelService {
 
         for (Object[] row : cutRolls.consumptionByCutAndFabricType()) {
             Long cutId = (Long) row[0];
-            Long fabricTypeId = (Long) row[1];
-            BigDecimal consumed = (BigDecimal) row[4];
-            fabricNames.putIfAbsent(fabricTypeId, new Object[] {row[2], row[3]});
+            CutType cutType = (CutType) row[1];
+            Long fabricTypeId = (Long) row[2];
+            BigDecimal consumed = (BigDecimal) row[5];
+            fabricNames.putIfAbsent(fabricTypeId, new Object[] {row[3], row[4]});
 
             Map<Long, Integer> perLayer = perLayerByCut.get(cutId);
             int layers = layersByCut.getOrDefault(cutId, 0);
@@ -141,7 +145,7 @@ public class ModelService {
                 if (modelId != null && !modelId.equals(entry.getKey())) {
                     continue;
                 }
-                Key key = new Key(entry.getKey(), fabricTypeId);
+                Key key = new Key(entry.getKey(), fabricTypeId, cutType);
 
                 // This model's share of the cut, by pieces.
                 BigDecimal share = BigDecimal.valueOf(entry.getValue())
@@ -164,13 +168,19 @@ public class ModelService {
             rows.add(ModelFabricUsageDto.of(
                     key.modelId(), model[0], model[1],
                     key.fabricTypeId(), (String) fabric[0], (FabricUnit) fabric[1],
+                    key.cutType(),
                     cutsSeen.get(key).size(),
                     pieces.getOrDefault(key, 0L),
                     entry.getValue().setScale(3, RoundingMode.HALF_UP)));
         }
+        // Model, then fabric, then MAIN before SECONDARY before DERBY.
         rows.sort((a, b) -> {
             int byModel = a.modelNumber().compareTo(b.modelNumber());
-            return byModel != 0 ? byModel : a.fabricTypeNameAr().compareTo(b.fabricTypeNameAr());
+            if (byModel != 0) {
+                return byModel;
+            }
+            int byFabric = a.fabricTypeNameAr().compareTo(b.fabricTypeNameAr());
+            return byFabric != 0 ? byFabric : a.cutType().compareTo(b.cutType());
         });
         return rows;
     }

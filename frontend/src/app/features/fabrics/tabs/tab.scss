@@ -204,3 +204,9 @@ table {
 .count-line {
   margin: 0 0 0.5rem;
 }
+
+/* Secondary and derby runs read as additions to the main one. */
+.secondary-run {
+  color: var(--mat-sys-tertiary);
+  font-weight: 600;
+}

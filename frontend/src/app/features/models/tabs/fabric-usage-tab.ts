@@ -30,7 +30,10 @@ import { ProductionService } from '../production.service';
   ],
   template: `
     <div class="tab-toolbar">
-      <p class="muted">{{ 'usage.hint' | translate }}</p>
+      <p class="muted">
+        {{ 'usage.hint' | translate }}<br />
+        {{ 'usage.denominatorHint' | translate }}
+      </p>
       <span class="spacer"></span>
       <button mat-stroked-button (click)="production.fabricUsage.reload()">
         <mat-icon>refresh</mat-icon>
@@ -52,6 +55,15 @@ import { ProductionService } from '../production.service';
         <ng-container matColumnDef="fabric">
           <th mat-header-cell *matHeaderCellDef>{{ 'fabric.type' | translate }}</th>
           <td mat-cell *matCellDef="let r">{{ r.fabricTypeNameAr }}</td>
+        </ng-container>
+
+        <ng-container matColumnDef="cutType">
+          <th mat-header-cell *matHeaderCellDef>{{ 'usage.cutType' | translate }}</th>
+          <td mat-cell *matCellDef="let r">
+            <span [class.secondary-run]="r.cutType !== 'MAIN'">
+              {{ 'cutType.' + r.cutType | translate }}
+            </span>
+          </td>
         </ng-container>
 
         <ng-container matColumnDef="cuts">
@@ -91,5 +103,13 @@ import { ProductionService } from '../production.service';
 })
 export class FabricUsageTab {
   protected readonly production = inject(ProductionService);
-  protected readonly columns = ['model', 'fabric', 'cuts', 'pieces', 'total', 'perPiece'];
+  protected readonly columns = [
+    'model',
+    'fabric',
+    'cutType',
+    'cuts',
+    'pieces',
+    'total',
+    'perPiece',
+  ];
 }

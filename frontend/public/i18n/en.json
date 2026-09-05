@@ -439,6 +439,9 @@
     "perPiece": "per piece",
     "totalWeight": "Total used",
     "cuts": "Cuts",
-    "hint": "One cut can make several models, so its fabric is split between them by pieces"
+    "hint": "One cut can make several models, so its fabric is split between them by pieces",
+    "cutType": "Cut type",
+    "total": "Total",
+    "denominatorHint": "Per-piece is divided by that run's own pieces — a secondary run's pieces may be components, not whole garments"
   }
 }

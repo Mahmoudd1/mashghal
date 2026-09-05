@@ -663,6 +663,8 @@ export interface ModelFabricUsage {
   fabricTypeId: number;
   fabricTypeNameAr: string;
   unit: FabricUnit;
+  /** Which run the fabric went into: the body, or a secondary/derby addition. */
+  cutType: CutType;
   cutCount: number;
   totalPieces: number;
   totalWeight: number;

@@ -26,14 +26,19 @@ public interface CutRollRepository extends JpaRepository<CutRoll, Long> {
 
     boolean existsByFabricRollId(Long fabricRollId);
 
-    /** Fabric consumed per cut and fabric type: [cutId, typeId, typeNameAr, unit, weight]. */
+    /**
+     * Fabric consumed per cut and fabric type, with the cut's type so usage can be
+     * split between the main run and the secondary and derby runs that follow it.
+     * Rows: [cutId, cutType, typeId, typeNameAr, unit, weight].
+     */
     @Query("""
-            select cr.cut.id, t.id, t.nameAr, t.unit, sum(cr.weightConsumed)
+            select cr.cut.id, c.cutType, t.id, t.nameAr, t.unit, sum(cr.weightConsumed)
             from CutRoll cr
+              join cr.cut c
               join cr.fabricRoll r
               join r.intake i
               join i.fabricType t
-            group by cr.cut.id, t.id, t.nameAr, t.unit
+            group by cr.cut.id, c.cutType, t.id, t.nameAr, t.unit
             """)
     List<Object[]> consumptionByCutAndFabricType();
 

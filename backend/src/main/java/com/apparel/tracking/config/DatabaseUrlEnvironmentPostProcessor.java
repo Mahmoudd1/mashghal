@@ -6,8 +6,10 @@ import java.nio.charset.StandardCharsets;
 import java.util.HashMap;
 import java.util.Map;
 
+import org.apache.commons.logging.Log;
 import org.springframework.boot.EnvironmentPostProcessor;
 import org.springframework.boot.SpringApplication;
+import org.springframework.boot.logging.DeferredLogFactory;
 import org.springframework.core.Ordered;
 import org.springframework.core.env.ConfigurableEnvironment;
 import org.springframework.core.env.MapPropertySource;
@@ -30,10 +32,23 @@ import org.springframework.util.StringUtils;
  */
 public class DatabaseUrlEnvironmentPostProcessor implements EnvironmentPostProcessor, Ordered {
 
-    /** Platform-provided variables, in the order we prefer them. */
-    private static final String[] SOURCE_KEYS = {"DB_URL", "DATABASE_URL", "POSTGRES_URL"};
+    /**
+     * Where a URI-style URL might arrive. {@code spring.datasource.url} comes first
+     * because it catches every variable that binds to it — {@code SPRING_DATASOURCE_URL}
+     * included — rather than us guessing platform variable names.
+     */
+    private static final String[] SOURCE_KEYS = {
+        "spring.datasource.url", "DB_URL", "DATABASE_URL", "POSTGRES_URL"
+    };
 
     private static final String PROPERTY_SOURCE_NAME = "databaseUrlTranslation";
+
+    private final Log log;
+
+    /** Boot supplies the factory; logging this early has to be deferred until logging starts. */
+    public DatabaseUrlEnvironmentPostProcessor(DeferredLogFactory logFactory) {
+        this.log = logFactory.getLog(DatabaseUrlEnvironmentPostProcessor.class);
+    }
 
     @Override
     public int getOrder() {
@@ -44,7 +59,7 @@ public class DatabaseUrlEnvironmentPostProcessor implements EnvironmentPostProce
     @Override
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
         for (String key : SOURCE_KEYS) {
-            String value = environment.getProperty(key);
+            String value = resolve(environment, key);
             if (!StringUtils.hasText(value) || !isUriStyle(value)) {
                 continue;
             }
@@ -52,8 +67,27 @@ public class DatabaseUrlEnvironmentPostProcessor implements EnvironmentPostProce
             if (!translated.isEmpty()) {
                 environment.getPropertySources()
                         .addFirst(new MapPropertySource(PROPERTY_SOURCE_NAME, translated));
+                // Says plainly in the deployment log that the conversion happened, so a
+                // start-up failure can be told apart from a stale build that lacks this.
+                log.info("Converted URI-style database URL from " + key + " to "
+                        + translated.get("spring.datasource.url"));
             }
             return;
+        }
+    }
+
+    /**
+     * Reads a property, tolerating one that cannot resolve yet.
+     *
+     * <p>Under the prod profile {@code spring.datasource.url} is {@code ${DB_URL}},
+     * which throws while DB_URL is unset. That is not our problem to report — the
+     * datasource will say so far more clearly.
+     */
+    private String resolve(ConfigurableEnvironment environment, String key) {
+        try {
+            return environment.getProperty(key);
+        } catch (IllegalArgumentException ex) {
+            return null;
         }
     }
 

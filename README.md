@@ -140,6 +140,20 @@ the URI, so an explicit override is never silently replaced. Query parameters su
 the conversion, which is what keeps `?sslmode=require` working on a database reached
 over the public internet.
 
+The conversion is checked first against `spring.datasource.url` itself, so it also
+catches a URI supplied through `SPRING_DATASOURCE_URL` or any other variable that
+binds to that property, rather than depending on a list of platform variable names.
+
+When it converts, it says so at INFO on start-up:
+
+```
+Converted URI-style database URL from spring.datasource.url to jdbc:postgresql://host:5432/dbname
+```
+
+If a deployment still fails with `'url' must start with "jdbc"` and that line is
+**absent** from the log, the running build predates this conversion — the platform
+served a cached image rather than rebuilding.
+
 ### What the prod profile changes
 
 - API docs and Swagger UI **off**

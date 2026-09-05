@@ -4,6 +4,7 @@ import static org.assertj.core.api.Assertions.assertThat;
 
 import java.util.Map;
 
+import org.apache.commons.logging.LogFactory;
 import org.junit.jupiter.api.Test;
 import org.springframework.mock.env.MockEnvironment;
 
@@ -13,7 +14,9 @@ import org.springframework.mock.env.MockEnvironment;
  */
 class DatabaseUrlEnvironmentPostProcessorTest {
 
-    private final DatabaseUrlEnvironmentPostProcessor processor = new DatabaseUrlEnvironmentPostProcessor();
+    private final DatabaseUrlEnvironmentPostProcessor processor =
+            new DatabaseUrlEnvironmentPostProcessor(
+                    destination -> LogFactory.getLog(DatabaseUrlEnvironmentPostProcessorTest.class));
 
     private Map<String, Object> translate(Map<String, String> env) {
         MockEnvironment environment = new MockEnvironment();
@@ -65,6 +68,16 @@ class DatabaseUrlEnvironmentPostProcessorTest {
 
         // Nothing translated, so the placeholder in application.yml still applies.
         assertThat(result.get("url")).isEqualTo("null");
+    }
+
+    @Test
+    void convertsAUriSetDirectlyOnSpringDatasourceUrl() {
+        // SPRING_DATASOURCE_URL binds straight to this, bypassing DB_URL entirely.
+        var result = translate(Map.of("spring.datasource.url",
+                "postgresql://carol:s3cret@db.internal:5432/apparel"));
+
+        assertThat(result.get("url")).isEqualTo("jdbc:postgresql://db.internal:5432/apparel");
+        assertThat(result.get("username")).isEqualTo("carol");
     }
 
     @Test

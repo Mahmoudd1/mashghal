@@ -93,6 +93,19 @@ class DatabaseUrlEnvironmentPostProcessorTest {
     }
 
     @Test
+    void doesNotOverrideAWorkingJdbcUrlWithAPlatformInjectedOne() {
+        // Railway injects DATABASE_URL on its own. A deliberate jdbc: DB_URL must win,
+        // or the application silently connects to a different database.
+        var result = translate(Map.of(
+                "spring.datasource.url", "jdbc:postgresql://chosen.host:5432/apparel",
+                "DB_URL", "jdbc:postgresql://chosen.host:5432/apparel",
+                "DATABASE_URL", "postgresql://other:other@injected.host:5432/other"));
+
+        // Nothing translated, so the configured jdbc: URL stands.
+        assertThat(result.get("url")).isEqualTo("jdbc:postgresql://chosen.host:5432/apparel");
+    }
+
+    @Test
     void readsDatabaseUrlWhenDbUrlIsAbsent() {
         var result = translate(Map.of("DATABASE_URL", "postgresql://carol:s3cret@db.internal:5432/apparel"));
 

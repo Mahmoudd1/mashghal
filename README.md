@@ -143,6 +143,9 @@ over the public internet.
 The conversion is checked first against `spring.datasource.url` itself, so it also
 catches a URI supplied through `SPRING_DATASOURCE_URL` or any other variable that
 binds to that property, rather than depending on a list of platform variable names.
+A URL that is already `jdbc:` stops the check outright: platforms publish their own
+URI variable alongside yours — Railway injects `DATABASE_URL` automatically — and
+converting that on top would silently repoint the app at a different database.
 
 When it converts, it says so at INFO on start-up:
 

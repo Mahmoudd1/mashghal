@@ -58,6 +58,15 @@ public class DatabaseUrlEnvironmentPostProcessor implements EnvironmentPostProce
 
     @Override
     public void postProcessEnvironment(ConfigurableEnvironment environment, SpringApplication application) {
+        // A datasource URL that is already JDBC is the deliberate, working configuration.
+        // Stop here: platforms also publish their own URI-style variable (Railway injects
+        // DATABASE_URL automatically), and converting that on top would silently repoint
+        // the application at a different database than the one it was configured with.
+        String configured = resolve(environment, "spring.datasource.url");
+        if (StringUtils.hasText(configured) && configured.startsWith("jdbc:")) {
+            return;
+        }
+
         for (String key : SOURCE_KEYS) {
             String value = resolve(environment, key);
             if (!StringUtils.hasText(value) || !isUriStyle(value)) {

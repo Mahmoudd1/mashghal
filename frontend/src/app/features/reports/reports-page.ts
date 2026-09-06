@@ -1,5 +1,5 @@
 import { DecimalPipe } from '@angular/common';
-import { ChangeDetectionStrategy, Component, inject } from '@angular/core';
+import { ChangeDetectionStrategy, Component, computed, inject } from '@angular/core';
 import { MatButtonModule } from '@angular/material/button';
 import { MatCardModule } from '@angular/material/card';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -60,6 +60,26 @@ export class ReportsPage {
   protected readonly byDateColumns = ['date', 'type', 'pool', 'rolls', 'quantity'];
   protected readonly openRollColumns = ['type', 'color', 'open', 'remaining'];
   protected readonly categoryModelColumns = ['model', 'category', 'perLayer'];
+
+  /**
+   * What every batch of fabric on the stock report cost, added up.
+   *
+   * <p>Money is the one column that survives the sum: the rows are per fabric
+   * type, and a type is priced per kilo or per metre, so their quantities are
+   * not the same thing and are left out of the footer. Null when no row carries
+   * a price — either nothing has been priced yet, or the reader is not the owner
+   * and the server blanked it.
+   */
+  protected readonly fabricTotalCost = computed<number | null>(() => {
+    const priced = this.reports.fabricStock.value().filter((row) => row.totalCost !== null);
+    return priced.length === 0
+      ? null
+      : priced.reduce((sum, row) => sum + row.totalCost!, 0);
+  });
+
+  protected readonly fabricTotalBatches = computed(() =>
+    this.reports.fabricStock.value().reduce((sum, row) => sum + row.batchCount, 0),
+  );
 
   protected typeName(row: FabricStock): string {
     return this.language.language() === 'en' && row.fabricTypeNameEn

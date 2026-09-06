@@ -17,6 +17,8 @@ public interface FabricIntakeRepository extends JpaRepository<FabricIntake, Long
 
     boolean existsByDerbyId(Long derbyId);
 
+    boolean existsByParentIntakeId(Long parentIntakeId);
+
     /**
      * The fabric type's most recent regular purchase, newest first.
      *

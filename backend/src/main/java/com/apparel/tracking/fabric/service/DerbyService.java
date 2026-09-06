@@ -24,6 +24,7 @@ import jakarta.validation.constraints.DecimalMin;
 import jakarta.validation.constraints.Digits;
 import jakarta.validation.constraints.NotEmpty;
 import jakarta.validation.constraints.NotNull;
+import jakarta.validation.constraints.PastOrPresent;
 import jakarta.validation.constraints.Size;
 
 import org.springframework.data.domain.PageRequest;
@@ -31,14 +32,17 @@ import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * A fabric type's derby pool.
+ * Buying derby.
  *
- * <p>One per fabric type at most. Creating it is a one-off; adding more derby
- * fabric afterwards is an intake against this record, not a second derby.
+ * <p>Derby is bought the way fabric is: on a date, from a supplier, at a price —
+ * most often in the same transaction as the fabric itself, occasionally on its
+ * own from somebody else. Each purchase is its own dated batch, and they pool
+ * together under the fabric type. The pool is a bookkeeping record, created the
+ * first time one is needed and never asked for.
  *
  * <p>A derby is bought as a set of colours with a weight each, not as a roll
  * count, so that is what the form asks for. Underneath it is still an ordinary
- * dated purchase against this pool — which is what makes derby stock visible to
+ * dated purchase against the pool — which is what makes derby stock visible to
  * the cuts, the remaining report and the waste figures without any of them
  * needing to know a derby exists.
  */
@@ -47,11 +51,31 @@ import org.springframework.transaction.annotation.Transactional;
 public class DerbyService {
 
     /**
-     * @param supplierId    null falls back to whoever supplied the fabric last
-     * @param pricePerUnit  null falls back to what the fabric last cost
-     * @param colors        the opening stock; a derby is created with fabric in it
+     * A derby bought together with a fabric purchase.
+     *
+     * <p>Date and supplier are the parent purchase's and are not restated here —
+     * that is what "bought with the fabric" means. The price is the parent's too
+     * unless this says otherwise.
+     *
+     * @param pricePerUnit null takes the price the fabric itself was bought at
      */
-    public record DerbyRequest(
+    public record DerbyOnPurchaseRequest(
+            @Size(max = 512) String note,
+            @DecimalMin("0.0") @Digits(integer = 9, fraction = 3) BigDecimal pricePerUnit,
+            @NotEmpty @Valid List<DerbyColorRequest> colors) {
+    }
+
+    /**
+     * A derby bought on its own, from whoever sold it.
+     *
+     * <p>It belongs to the fabric type and to no particular purchase of it, so it
+     * carries its own date, supplier and price.
+     *
+     * @param supplierId   null falls back to whoever supplied the fabric last
+     * @param pricePerUnit null falls back to what the fabric last cost
+     */
+    public record DerbyPurchaseRequest(
+            @NotNull @PastOrPresent LocalDate intakeDate,
             @Size(max = 512) String note,
             Long supplierId,
             @DecimalMin("0.0") @Digits(integer = 9, fraction = 3) BigDecimal pricePerUnit,
@@ -121,58 +145,107 @@ public class DerbyService {
     }
 
     /**
-     * Creates the pool and the fabric that is in it, in one go.
+     * Records a derby bought together with an existing fabric purchase.
      *
-     * <p>The colours are turned into an ordinary derby purchase: one roll per
-     * colour, weighing what was entered for it. A derby is drawn on by the roll
-     * like any other stock, so it needs a roll count even though nobody counts
-     * derby in rolls — one per colour is the count that lets each colour be
-     * picked up and cut separately.
+     * <p>This is the usual case: the derby came on the same day, from the same
+     * supplier, at the same price, so none of that is asked for again — it is
+     * read off the purchase being added to.
      */
-    public DerbyDto create(Long fabricTypeId, DerbyRequest request) {
-        FabricType type = requireType(fabricTypeId);
+    public FabricIntakeDto addToPurchase(Long parentIntakeId, DerbyOnPurchaseRequest request) {
+        FabricIntake parent = intakes.findById(parentIntakeId)
+                .orElseThrow(() -> NotFoundException.of("Fabric intake", parentIntakeId));
 
-        if (derbies.existsByFabricTypeId(fabricTypeId)) {
-            throw new BusinessRuleException("derby_already_exists",
-                    "'%s' already has a derby; add stock to it instead of creating another"
-                            .formatted(type.getNameAr()));
+        if (parent.isDerbyPool()) {
+            throw new BusinessRuleException("derby_parent_is_derby",
+                    "That purchase is itself derby stock; a derby cannot have a derby");
+        }
+        if (intakes.existsByParentIntakeId(parentIntakeId)) {
+            throw new BusinessRuleException("derby_already_on_purchase",
+                    "The %s purchase already has a derby recorded against it"
+                            .formatted(parent.getIntakeDate()));
         }
 
-        Derby derby = new Derby();
-        derby.setFabricType(type);
-        derby.setNote(request.note());
-        derbies.save(derby);
+        return record(
+                parent.getFabricType(),
+                parent,
+                parent.getIntakeDate(),
+                parent.getSupplier() == null ? null : parent.getSupplier().getId(),
+                request.pricePerUnit() != null ? request.pricePerUnit() : parent.getPricePerUnit(),
+                request.note(),
+                request.colors());
+    }
 
-        // Inherited server-side rather than trusted from the form, so a user who
-        // may not see prices still creates a derby that carries the right one.
+    /**
+     * Records a derby bought on its own, tied to the fabric type rather than to
+     * any one purchase of it.
+     */
+    public FabricIntakeDto recordPurchase(Long fabricTypeId, DerbyPurchaseRequest request) {
+        FabricType type = requireType(fabricTypeId);
         FabricIntake latest = latestRegularIntake(fabricTypeId);
-        Long supplierId = request.supplierId() != null
-                ? request.supplierId()
-                : (latest == null || latest.getSupplier() == null ? null : latest.getSupplier().getId());
-        BigDecimal price = request.pricePerUnit() != null
-                ? request.pricePerUnit()
-                : (latest == null ? null : latest.getPricePerUnit());
 
-        BigDecimal total = request.colors().stream()
+        return record(
+                type,
+                null,
+                request.intakeDate(),
+                request.supplierId() != null
+                        ? request.supplierId()
+                        : (latest == null || latest.getSupplier() == null
+                                ? null : latest.getSupplier().getId()),
+                request.pricePerUnit() != null
+                        ? request.pricePerUnit()
+                        : (latest == null ? null : latest.getPricePerUnit()),
+                request.note(),
+                request.colors());
+    }
+
+    /**
+     * The one place a derby batch is written.
+     *
+     * <p>The colours become an ordinary derby purchase: one roll per colour,
+     * weighing what was entered for it. Derby is bought by weight, not by the
+     * roll, but stock is drawn on by the roll — one per colour is the count that
+     * lets each colour be picked up and cut on its own.
+     */
+    private FabricIntakeDto record(
+            FabricType type,
+            FabricIntake parent,
+            LocalDate date,
+            Long supplierId,
+            BigDecimal price,
+            String note,
+            List<DerbyColorRequest> colors) {
+
+        // Created on demand: most fabric has a derby, and making someone open an
+        // empty pool first was a step that only ever stood in the way.
+        poolFor(type);
+
+        BigDecimal total = colors.stream()
                 .map(DerbyColorRequest::quantity)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         FabricIntakeDto batch = intakeService.create(new FabricIntakeRequest(
-                fabricTypeId,
-                true,
-                supplierId,
-                LocalDate.now(),
-                request.colors().size(),
-                total,
-                price,
-                request.note()));
+                type.getId(), true, supplierId, date, colors.size(), total, price, note));
 
-        for (DerbyColorRequest color : request.colors()) {
+        if (parent != null) {
+            intakes.findById(batch.id()).ifPresent(saved -> saved.setParentIntake(parent));
+        }
+
+        for (DerbyColorRequest color : colors) {
             intakeService.setColorBreakdown(batch.id(),
                     new FabricIntakeColorRequest(color.fabricColorId(), 1, color.quantity()));
         }
 
-        return DerbyDto.from(derby);
+        return intakeService.get(batch.id());
+    }
+
+    /** The fabric type's derby pool, created the first time one is needed. */
+    private Derby poolFor(FabricType type) {
+        return derbies.findByFabricTypeId(type.getId()).orElseGet(() -> {
+            Derby derby = new Derby();
+            derby.setFabricType(type);
+            derby.setNote("دربي " + type.getNameAr());
+            return derbies.save(derby);
+        });
     }
 
     public DerbyDto update(Long id, DerbyNoteRequest request) {

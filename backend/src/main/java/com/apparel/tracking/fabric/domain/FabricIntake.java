@@ -54,6 +54,18 @@ public class FabricIntake extends BaseEntity {
     @JoinColumn(name = "supplier_id")
     private Supplier supplier;
 
+    /**
+     * The fabric purchase this derby arrived with.
+     *
+     * <p>Set only on a derby batch, and only when the derby was bought together
+     * with its fabric — which is the usual way. Null on regular stock, and null
+     * on a derby bought separately: that one belongs to the fabric type and to no
+     * particular purchase of it.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_intake_id")
+    private FabricIntake parentIntake;
+
     @Column(name = "intake_date", nullable = false)
     private LocalDate intakeDate;
 

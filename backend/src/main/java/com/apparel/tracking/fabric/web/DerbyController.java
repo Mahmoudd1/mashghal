@@ -4,6 +4,7 @@ import java.util.List;
 
 import com.apparel.tracking.fabric.dto.DerbyDefaultsDto;
 import com.apparel.tracking.fabric.dto.DerbyDto;
+import com.apparel.tracking.fabric.dto.FabricIntakeDto;
 import com.apparel.tracking.fabric.service.DerbyService;
 
 import io.swagger.v3.oas.annotations.Operation;
@@ -50,12 +51,13 @@ public class DerbyController {
         return derbies.defaultsFor(fabricTypeId);
     }
 
-    @PostMapping("/fabric-types/{fabricTypeId}/derby")
+    @PostMapping("/fabric-types/{fabricTypeId}/derby-purchases")
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Give this fabric type a derby pool with its opening stock; at most one, ever")
-    public DerbyDto create(
-            @PathVariable Long fabricTypeId, @Valid @RequestBody DerbyService.DerbyRequest request) {
-        return derbies.create(fabricTypeId, request);
+    @Operation(summary = "Record a derby bought on its own, tied to the fabric type")
+    public FabricIntakeDto recordPurchase(
+            @PathVariable Long fabricTypeId,
+            @Valid @RequestBody DerbyService.DerbyPurchaseRequest request) {
+        return derbies.recordPurchase(fabricTypeId, request);
     }
 
     @PutMapping("/derbies/{id}")

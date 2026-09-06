@@ -34,6 +34,8 @@ public record FabricIntakeDto(
         Long supplierId,
         String supplierNameAr,
         LocalDate intakeDate,
+        /** The fabric purchase this derby was bought with; null when bought alone. */
+        Long parentIntakeId,
         int totalRolls,
         int consumedRolls,
         int remainingRolls,
@@ -55,7 +57,7 @@ public record FabricIntakeDto(
     public FabricIntakeDto withoutPrices() {
         return new FabricIntakeDto(
                 id, fabricTypeId, fabricTypeNameAr, fabricTypeNameEn, unit, pool,
-                supplierId, supplierNameAr, intakeDate,
+                supplierId, supplierNameAr, intakeDate, parentIntakeId,
                 totalRolls, consumedRolls, remainingRolls,
                 totalQuantity, consumedQuantity, remainingQuantity,
                 finished, wasteQuantity, wastePercentage,
@@ -75,6 +77,7 @@ public record FabricIntakeDto(
                 intake.getSupplier() == null ? null : intake.getSupplier().getId(),
                 intake.getSupplier() == null ? null : intake.getSupplier().getNameAr(),
                 intake.getIntakeDate(),
+                intake.getParentIntake() == null ? null : intake.getParentIntake().getId(),
                 intake.getTotalRolls(),
                 intake.getConsumedRolls(),
                 intake.remainingRolls(),

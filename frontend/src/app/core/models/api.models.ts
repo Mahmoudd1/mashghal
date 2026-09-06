@@ -367,6 +367,8 @@ export interface FabricIntake {
   supplierId: number | null;
   supplierNameAr: string | null;
   intakeDate: string;
+  /** For a derby batch: the fabric purchase it was bought with, if any. */
+  parentIntakeId: number | null;
   totalRolls: number;
   consumedRolls: number;
   remainingRolls: number;
@@ -457,13 +459,24 @@ export interface DerbyColorRequest {
   quantity: number;
 }
 
-export interface DerbyRequest {
+/**
+ * A derby bought with a fabric purchase. Its date and supplier are that
+ * purchase's and are not restated; a null price takes the fabric's own.
+ */
+export interface DerbyOnPurchaseRequest {
+  note: string | null;
+  pricePerUnit: number | null;
+  colors: DerbyColorRequest[];
+}
+
+/** A derby bought on its own, tied to the fabric type rather than a purchase. */
+export interface DerbyPurchaseRequest {
+  intakeDate: string;
   note: string | null;
   /** Null inherits whoever supplied the fabric last. */
   supplierId: number | null;
   /** Null inherits what the fabric last cost. */
   pricePerUnit: number | null;
-  /** The opening stock; a derby is created with fabric in it. */
   colors: DerbyColorRequest[];
 }
 

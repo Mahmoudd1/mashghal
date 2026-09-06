@@ -33,6 +33,7 @@ import org.springframework.web.bind.annotation.RequestBody;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
+import com.apparel.tracking.fabric.service.DerbyService;
 import org.springframework.web.bind.annotation.RestController;
 
 @RestController
@@ -41,9 +42,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class FabricIntakeController {
 
     private final FabricIntakeService service;
+    private final DerbyService derbies;
 
-    public FabricIntakeController(FabricIntakeService service) {
+    public FabricIntakeController(FabricIntakeService service, DerbyService derbies) {
         this.service = service;
+        this.derbies = derbies;
     }
 
     @GetMapping
@@ -115,6 +118,15 @@ public class FabricIntakeController {
     public ResponseEntity<Void> delete(@PathVariable Long id) {
         service.delete(id);
         return ResponseEntity.noContent().build();
+    }
+
+    @PostMapping("/{id}/derby")
+    @ResponseStatus(HttpStatus.CREATED)
+    @Operation(summary = "Record the derby bought with this fabric purchase")
+    public FabricIntakeDto addDerby(
+            @PathVariable Long id,
+            @Valid @RequestBody DerbyService.DerbyOnPurchaseRequest request) {
+        return derbies.addToPurchase(id, request);
     }
 
     @PostMapping("/{id}/colors")

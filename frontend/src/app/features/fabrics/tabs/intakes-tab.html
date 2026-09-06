@@ -40,6 +40,15 @@
   >
     {{ 'fabric.remaining' | translate }}
   </mat-checkbox>
+
+  <!-- Derby bought on its own, from whoever sold it. The usual case is the
+       per-purchase button below, where it came in with the fabric. -->
+  @if (auth.isAdmin()) {
+    <button mat-stroked-button (click)="recordDerby()">
+      <mat-icon>layers</mat-icon>
+      <span>{{ 'fabric.recordDerbyAlone' | translate }}</span>
+    </button>
+  }
 </div>
 
 @if (fabrics.intakes.isLoading()) {
@@ -59,10 +68,18 @@
           @if (intake.finished) {
             <mat-chip class="pool-chip chip-closed">{{ 'fabric.finished' | translate }}</mat-chip>
           }
+          @if (intake.parentIntakeId) {
+            <mat-chip class="pool-chip">{{ 'fabric.boughtWithFabric' | translate }}</mat-chip>
+          }
         </mat-panel-title>
         <mat-panel-description>
-          {{ intake.remainingRolls }} / {{ intake.totalRolls }}
-          {{ 'fabric.totalRolls' | translate }} · {{ intake.remainingQuantity | number: '1.0-3' }} /
+          <!-- Derby is bought and measured by weight; its roll count is an
+               internal one-per-colour device and means nothing to anybody. -->
+          @if (intake.pool !== 'DERBY') {
+            {{ intake.remainingRolls }} / {{ intake.totalRolls }}
+            {{ 'fabric.totalRolls' | translate }} ·
+          }
+          {{ intake.remainingQuantity | number: '1.0-3' }} /
           {{ intake.totalQuantity | number: '1.0-3' }}
           {{ 'unit.' + intake.unit | translate }}
         </mat-panel-description>
@@ -95,8 +112,11 @@
         <span>
           <span class="fact-label">{{ 'fabric.consumed' | translate }}</span>
           <span class="numeric">
-            {{ intake.consumedRolls }} {{ 'fabric.totalRolls' | translate }} ·
+            @if (intake.pool !== 'DERBY') {
+              {{ intake.consumedRolls }} {{ 'fabric.totalRolls' | translate }} ·
+            }
             {{ intake.consumedQuantity | number: '1.0-3' }}
+            {{ 'unit.' + intake.unit | translate }}
           </span>
         </span>
         <!-- Only once the last roll is gone: until then the unconsumed weight
@@ -118,8 +138,9 @@
         <p class="muted">{{ intake.note }}</p>
       }
 
-      <!-- Advisory only: a partial or excess breakdown never blocks anything. -->
-      @if (intake.unassignedRolls > 0) {
+      <!-- Advisory only: a partial or excess breakdown never blocks anything.
+           Derby is not counted in rolls, so neither warning applies to it. -->
+      @if (intake.pool !== 'DERBY' && intake.unassignedRolls > 0) {
         <p class="soft-warning">
           <mat-icon inline>info</mat-icon>
           {{
@@ -128,7 +149,7 @@
           }}
         </p>
       }
-      @if (intake.overAssignedRolls > 0) {
+      @if (intake.pool !== 'DERBY' && intake.overAssignedRolls > 0) {
         <p class="soft-warning soft-warning-strong">
           <mat-icon inline>warning</mat-icon>
           {{
@@ -142,10 +163,18 @@
         <h3 class="section-heading">{{ 'fabric.colorBreakdown' | translate }}</h3>
         <span class="spacer"></span>
         @if (auth.isAdmin()) {
-          <button mat-stroked-button (click)="assignColor(intake)">
-            <mat-icon>palette</mat-icon>
-            <span>{{ 'fabric.addColorBreakdown' | translate }}</span>
-          </button>
+          @if (intake.pool !== 'DERBY') {
+            <button mat-stroked-button (click)="addDerby(intake)">
+              <mat-icon>layers</mat-icon>
+              <span>{{ 'fabric.addDerby' | translate }}</span>
+            </button>
+          }
+          @if (intake.pool !== 'DERBY') {
+            <button mat-stroked-button (click)="assignColor(intake)">
+              <mat-icon>palette</mat-icon>
+              <span>{{ 'fabric.colorBreakdown' | translate }}</span>
+            </button>
+          }
           <button
             mat-icon-button
             [matTooltip]="'fabric.editIntake' | translate"
@@ -169,18 +198,18 @@
         <mat-chip-set>
           @for (row of intake.colorBreakdown; track row.id) {
             <mat-chip>
-              {{ row.colorNameAr }}: {{ row.rollCount }}
-              @if (row.quantity) {
-                <span class="muted">&nbsp;({{ row.quantity | number: '1.0-3' }})</span>
+              @if (intake.pool === 'DERBY') {
+                {{ row.colorNameAr }}: {{ row.quantity | number: '1.0-3' }}
+                {{ 'unit.' + intake.unit | translate }}
+              } @else {
+                {{ row.colorNameAr }}: {{ row.rollCount }}
+                @if (row.quantity) {
+                  <span class="muted">&nbsp;({{ row.quantity | number: '1.0-3' }})</span>
+                }
               }
               <!-- One projectable node per @if: Material slots the trailing
                    icons individually, and a block with two roots is skipped. -->
-              @if (auth.isAdmin()) {
-                <button matChipTrailingIcon class="chip-action" (click)="editColor(intake, row)">
-                  <mat-icon inline>edit</mat-icon>
-                </button>
-              }
-              @if (auth.isAdmin()) {
+              @if (auth.isAdmin() && intake.pool !== 'DERBY') {
                 <button matChipTrailingIcon class="chip-action" (click)="removeColor(intake, row)">
                   <mat-icon inline>close</mat-icon>
                 </button>

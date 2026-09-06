@@ -26,8 +26,8 @@
           />
         </mat-form-field>
 
-        @if (failed()) {
-          <p class="login-error">{{ 'auth.invalidCredentials' | translate }}</p>
+        @if (errorKey(); as key) {
+          <p class="login-error">{{ key | translate }}</p>
         }
 
         <button mat-flat-button type="submit" [disabled]="form.invalid || submitting()">

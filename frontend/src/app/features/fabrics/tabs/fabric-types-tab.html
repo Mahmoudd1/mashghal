@@ -31,20 +31,17 @@
 
       <p class="soft-warning">
         <mat-icon inline>{{ type.hasDerby ? 'check_circle' : 'info' }}</mat-icon>
-        {{ (type.hasDerby ? 'fabric.derbyHint' : 'fabric.noDerby') | translate }}
+        {{ (type.hasDerby ? 'fabric.derbyHint' : 'fabric.noDerbyYet') | translate }}
       </p>
 
       @if (auth.isAdmin()) {
         <div class="tab-toolbar">
+          <!-- A derby is not created here any more: it comes into being with the
+               first derby purchase, in مشتريات. Removing an unused one stays. -->
           @if (type.hasDerby) {
             <button mat-stroked-button (click)="deleteDerby(type)">
               <mat-icon>layers_clear</mat-icon>
               <span>{{ 'fabric.deleteDerby' | translate }}</span>
-            </button>
-          } @else {
-            <button mat-stroked-button (click)="createDerby(type)">
-              <mat-icon>layers</mat-icon>
-              <span>{{ 'fabric.addDerby' | translate }}</span>
             </button>
           }
           <button mat-stroked-button (click)="addColor(type)">

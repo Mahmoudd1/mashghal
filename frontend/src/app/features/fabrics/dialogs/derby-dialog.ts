@@ -1,4 +1,4 @@
-import { DecimalPipe } from '@angular/common';
+import { DatePipe, DecimalPipe } from '@angular/common';
 import { ChangeDetectionStrategy, Component, computed, inject, signal } from '@angular/core';
 import { toSignal } from '@angular/core/rxjs-interop';
 import {
@@ -11,6 +11,7 @@ import {
 } from '@angular/forms';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatButtonModule } from '@angular/material/button';
+import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
 import { MatIconModule } from '@angular/material/icon';
@@ -20,33 +21,40 @@ import { TranslatePipe } from '@ngx-translate/core';
 import { Observable, forkJoin, of, switchMap } from 'rxjs';
 
 import { AuthService } from '../../../core/auth/auth.service';
-import { DerbyColorRequest, FabricType } from '../../../core/models/api.models';
+import { DerbyColorRequest, FabricIntake, FabricType } from '../../../core/models/api.models';
+import { toIsoDate } from '../../../shared/date-utils';
 import { filterByName, findExact } from '../../../shared/lookup-autocomplete/lookup-filter';
 import { NumericFieldDirective } from '../../../shared/numerals/numeric-field.directive';
 import { SupplierService } from '../../suppliers/supplier.service';
 import { FabricService } from '../fabric.service';
 
+/**
+ * Either the purchase the derby was bought with, or the fabric type it belongs
+ * to when it was bought on its own. Exactly one is given.
+ */
 export interface DerbyDialogData {
-  type: FabricType;
+  purchase?: FabricIntake;
+  type?: FabricType;
 }
 
-/** One colour of the derby being created, and how much of it there is. */
+/** One colour of the derby, and how much of it there is. */
 type ColorRow = FormGroup<{
   colorName: FormControl<string>;
   quantity: FormControl<number | null>;
 }>;
 
 /**
- * Creates a fabric type's derby, with the fabric that is in it.
+ * Records a derby purchase.
  *
- * <p>A derby is bought as a set of colours with a weight each — not as a roll
- * count — so that is what this asks for. The pool and its opening purchase are
- * created together: an empty derby is a pool nobody can cut from, and leaving it
- * empty only meant the stock had to be entered again somewhere else.
+ * <p>Derby is bought the way fabric is — on a date, from a supplier, at a price —
+ * and almost always in the same transaction as the fabric itself. Opened from a
+ * purchase, that is exactly what it means: the date and supplier are that
+ * purchase's and are not asked for again, and its price is offered as the
+ * derby's. Opened on its own, the derby belongs to the fabric type and carries
+ * its own date, supplier and price.
  *
- * <p>Supplier and price arrive already filled from the fabric's last purchase,
- * because a derby is bought alongside its main fabric. They stay editable: the
- * same derby is sometimes bought from someone else, or at another price.
+ * <p>Either way it is bought as colours with a weight each, never as a roll
+ * count, so that is all the form asks for.
  */
 @Component({
   selector: 'app-derby-dialog',
@@ -55,6 +63,7 @@ type ColorRow = FormGroup<{
     ReactiveFormsModule,
     MatAutocompleteModule,
     MatButtonModule,
+    MatDatepickerModule,
     MatDialogModule,
     MatFormFieldModule,
     MatIconModule,
@@ -62,20 +71,28 @@ type ColorRow = FormGroup<{
     MatTooltipModule,
     TranslatePipe,
     DecimalPipe,
+    DatePipe,
     NumericFieldDirective,
   ],
   template: `
     <h2 mat-dialog-title>{{ 'fabric.addDerby' | translate }}</h2>
     <mat-dialog-content>
       <p class="action-context">
-        {{ data.type.nameAr }} · {{ 'unit.' + data.type.unit | translate }}
+        {{ fabricType().nameAr }} · {{ 'unit.' + fabricType().unit | translate }}
+        @if (data.purchase) {
+          · {{ 'fabric.boughtWith' | translate }}
+          {{ data.purchase.intakeDate | date: 'dd/MM/yyyy' }}
+          @if (data.purchase.supplierNameAr) {
+            · {{ data.purchase.supplierNameAr }}
+          }
+        }
       </p>
 
       <form [formGroup]="form" class="dialog-form">
         <h3 class="dialog-section">{{ 'fabric.derbyColors' | translate }}</h3>
 
         @for (row of colorRows.controls; track $index) {
-          <div class="derby-color-row" [formGroup]="row">
+          <div class="color-entry-row" [formGroup]="row">
             <mat-form-field appearance="outline">
               <mat-label>{{ 'fabric.color' | translate }}</mat-label>
               <input
@@ -101,7 +118,7 @@ type ColorRow = FormGroup<{
                 formControlName="quantity"
                 dir="ltr"
               />
-              <span matTextSuffix>&nbsp;{{ 'unit.' + data.type.unit | translate }}</span>
+              <span matTextSuffix>&nbsp;{{ 'unit.' + fabricType().unit | translate }}</span>
             </mat-form-field>
 
             <button
@@ -131,33 +148,43 @@ type ColorRow = FormGroup<{
         <p class="action-hint">
           {{ 'fabric.derbyTotal' | translate }}:
           <strong>{{ totalWeight() | number: '1.0-3' }}</strong>
-          {{ 'unit.' + data.type.unit | translate }}
+          {{ 'unit.' + fabricType().unit | translate }}
         </p>
 
-        <h3 class="dialog-section">{{ 'fabric.derbySource' | translate }}</h3>
+        <!-- Only a derby bought on its own states where it came from; one bought
+             with a purchase takes that purchase's date and supplier. -->
+        @if (!data.purchase) {
+          <h3 class="dialog-section">{{ 'fabric.derbySource' | translate }}</h3>
 
-        <!-- Prefilled from the fabric's last purchase, and still editable. -->
-        <mat-form-field appearance="outline">
-          <mat-label>{{ 'supplier.label' | translate }}</mat-label>
-          <input
-            matInput
-            formControlName="supplierName"
-            [matAutocomplete]="supplierAuto"
-            autocomplete="off"
-          />
-          <mat-autocomplete #supplierAuto="matAutocomplete">
-            @for (supplier of supplierSuggestions(); track supplier.id) {
-              <mat-option [value]="supplier.nameAr">{{ supplier.nameAr }}</mat-option>
-            }
-          </mat-autocomplete>
-          <mat-hint>{{ 'fabric.derbyInheritedHint' | translate }}</mat-hint>
-        </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>{{ 'fabric.intakeDate' | translate }}</mat-label>
+            <input matInput [matDatepicker]="picker" [max]="today" formControlName="intakeDate" />
+            <mat-datepicker-toggle matIconSuffix [for]="picker" />
+            <mat-datepicker #picker />
+          </mat-form-field>
 
-        @if (creatingSupplier()) {
-          <p class="creating-hint">
-            <mat-icon inline>add_circle</mat-icon>
-            {{ 'common.willCreate' | translate }}
-          </p>
+          <mat-form-field appearance="outline">
+            <mat-label>{{ 'supplier.label' | translate }}</mat-label>
+            <input
+              matInput
+              formControlName="supplierName"
+              [matAutocomplete]="supplierAuto"
+              autocomplete="off"
+            />
+            <mat-autocomplete #supplierAuto="matAutocomplete">
+              @for (supplier of supplierSuggestions(); track supplier.id) {
+                <mat-option [value]="supplier.nameAr">{{ supplier.nameAr }}</mat-option>
+              }
+            </mat-autocomplete>
+            <mat-hint>{{ 'fabric.derbyInheritedHint' | translate }}</mat-hint>
+          </mat-form-field>
+
+          @if (creatingSupplier()) {
+            <p class="creating-hint">
+              <mat-icon inline>add_circle</mat-icon>
+              {{ 'common.willCreate' | translate }}
+            </p>
+          }
         }
 
         @if (auth.isOwner()) {
@@ -171,7 +198,12 @@ type ColorRow = FormGroup<{
               formControlName="pricePerUnit"
               dir="ltr"
             />
-            <mat-hint>{{ 'fabric.derbyInheritedHint' | translate }}</mat-hint>
+            <mat-hint>
+              {{
+                (data.purchase ? 'fabric.derbyPriceFromPurchase' : 'fabric.derbyInheritedHint')
+                  | translate
+              }}
+            </mat-hint>
           </mat-form-field>
         }
 
@@ -200,10 +232,27 @@ export class DerbyDialog {
   private readonly formBuilder = inject(FormBuilder);
 
   protected readonly saving = signal(false);
+  protected readonly today = new Date();
+
+  /** The fabric the derby belongs to, however the dialog was opened. */
+  protected readonly fabricType = computed<{ id: number; nameAr: string; unit: string }>(() => {
+    const purchase = this.data.purchase;
+    if (!purchase) {
+      return this.data.type!;
+    }
+    return (
+      this.fabrics.types.value().find((type) => type.id === purchase.fabricTypeId) ?? {
+        id: purchase.fabricTypeId,
+        nameAr: purchase.fabricTypeNameAr,
+        unit: purchase.unit,
+      }
+    );
+  });
 
   protected readonly form = this.formBuilder.nonNullable.group({
+    intakeDate: [new Date(), Validators.required],
     supplierName: ['', Validators.maxLength(128)],
-    pricePerUnit: [null as number | null],
+    pricePerUnit: [this.data.purchase?.pricePerUnit ?? (null as number | null)],
     note: ['', Validators.maxLength(512)],
     colors: this.formBuilder.array<ColorRow>([this.colorRow()]),
   });
@@ -212,12 +261,11 @@ export class DerbyDialog {
     return this.form.controls.colors;
   }
 
-  /** Colours already known for this fabric type. */
   private readonly knownColors = computed(() =>
-    this.fabrics.colorsOfType(this.data.type.id).filter((color) => color.active),
+    this.fabrics.colorsOfType(this.fabricType().id).filter((color) => color.active),
   );
 
-  /** Re-read on every value change, so the totals and hints keep up with typing. */
+  /** Re-read on every value change, so the total and hints keep up with typing. */
   private readonly formValue = toSignal(this.form.valueChanges, {
     initialValue: this.form.getRawValue(),
   });
@@ -247,14 +295,16 @@ export class DerbyDialog {
   );
 
   constructor() {
-    // The whole point of the prefill: the derby is bought with its fabric, so
-    // the supplier and price are already known and need not be retyped.
-    this.fabrics.derbyDefaults(this.data.type.id).subscribe((defaults) => {
-      this.form.patchValue({
-        supplierName: defaults.supplierNameAr ?? '',
-        pricePerUnit: defaults.pricePerUnit,
+    // A derby bought on its own still starts from what the fabric last cost —
+    // it is usually the same fabric from the same market.
+    if (!this.data.purchase) {
+      this.fabrics.derbyDefaults(this.fabricType().id).subscribe((defaults) => {
+        this.form.patchValue({
+          supplierName: defaults.supplierNameAr ?? '',
+          pricePerUnit: defaults.pricePerUnit,
+        });
       });
-    });
+    }
   }
 
   protected suggestionsFor(index: number): { id: number; nameAr: string }[] {
@@ -264,8 +314,7 @@ export class DerbyDialog {
 
   protected creatingColorAt(index: number): boolean {
     this.formValue();
-    const typed = this.typedNameAt(index).trim();
-    return typed !== '' && this.matchedColorAt(index) === undefined;
+    return this.typedNameAt(index).trim() !== '' && this.matchedColorAt(index) === undefined;
   }
 
   protected addColor(): void {
@@ -273,7 +322,7 @@ export class DerbyDialog {
   }
 
   protected removeColor(index: number): void {
-    // Never the last one: a derby with no colours is a pool with no fabric.
+    // Never the last one: a derby purchase with no colours is nothing at all.
     if (this.colorRows.length > 1) {
       this.colorRows.removeAt(index);
     }
@@ -289,29 +338,41 @@ export class DerbyDialog {
     // Colours are resolved to records first — a name matching none is created
     // under this fabric type, exactly as the colour breakdown does it.
     forkJoin(this.colorRows.controls.map((_, index) => this.resolveColorAt(index)))
-      .pipe(
-        switchMap((colorIds) =>
-          this.resolveSupplier(raw.supplierName).pipe(
-            switchMap((supplierId) =>
-              this.fabrics.createDerby(this.data.type.id, {
-                note: raw.note.trim() || null,
-                supplierId,
-                // Left null by a non-owner, who never sees the field: the server
-                // then falls back to what the fabric itself last cost.
-                pricePerUnit: this.auth.isOwner() ? raw.pricePerUnit : null,
-                colors: colorIds.map<DerbyColorRequest>((fabricColorId, index) => ({
-                  fabricColorId,
-                  quantity: Number(this.colorRows.at(index).controls.quantity.value),
-                })),
-              }),
-            ),
-          ),
-        ),
-      )
+      .pipe(switchMap((colorIds) => this.persist(colorIds, raw)))
       .subscribe({
         next: () => this.dialogRef.close(true),
         error: () => this.saving.set(false),
       });
+  }
+
+  private persist(
+    colorIds: number[],
+    raw: ReturnType<DerbyDialog['form']['getRawValue']>,
+  ): Observable<FabricIntake> {
+    const colors = colorIds.map<DerbyColorRequest>((fabricColorId, index) => ({
+      fabricColorId,
+      quantity: Number(this.colorRows.at(index).controls.quantity.value),
+    }));
+    // Left null by a non-owner, who never sees the field: the server then falls
+    // back to what the fabric itself cost.
+    const pricePerUnit = this.auth.isOwner() ? raw.pricePerUnit : null;
+    const note = raw.note.trim() || null;
+
+    const purchase = this.data.purchase;
+    if (purchase) {
+      return this.fabrics.addDerbyToPurchase(purchase.id, { note, pricePerUnit, colors });
+    }
+    return this.resolveSupplier(raw.supplierName).pipe(
+      switchMap((supplierId) =>
+        this.fabrics.recordDerbyPurchase(this.fabricType().id, {
+          intakeDate: toIsoDate(raw.intakeDate),
+          note,
+          supplierId,
+          pricePerUnit,
+          colors,
+        }),
+      ),
+    );
   }
 
   private colorRow(): ColorRow {
@@ -335,7 +396,7 @@ export class DerbyDialog {
       return of(existing.id);
     }
     return this.fabrics
-      .addColor(this.data.type.id, {
+      .addColor(this.fabricType().id, {
         nameAr: this.typedNameAt(index).trim(),
         nameEn: null,
         active: true,

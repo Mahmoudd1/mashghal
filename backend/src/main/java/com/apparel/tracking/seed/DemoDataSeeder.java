@@ -50,7 +50,6 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.annotation.Order;
-import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -242,23 +241,24 @@ public class DemoDataSeeder implements ApplicationRunner {
                 assigned += count;
             }
 
-            // The derby is created last, and with fabric already in it: colours and
-            // a weight each, taking its supplier and price from the purchases above
-            // rather than restating them. Both are left null here to exercise that.
+            // Derby the usual way: bought with the fabric, so it hangs off that
+            // purchase and takes its date, supplier and price rather than
+            // restating any of them. Colours and a weight each is all it needs.
             if (spec.withDerby()) {
-                derbies.create(typeId, new DerbyService.DerbyRequest(
-                        "دربي " + spec.nameAr(), null, null,
-                        List.of(
-                                new DerbyService.DerbyColorRequest(
-                                        colorIds.get(0), BigDecimal.valueOf(90 + n * 10L)),
-                                new DerbyService.DerbyColorRequest(
-                                        colorIds.get(Math.min(1, colorIds.size() - 1)),
-                                        BigDecimal.valueOf(60 + n * 5L)))));
+                FabricIntakeDto derbyBatch = derbies.addToPurchase(
+                        first.id(),
+                        new DerbyService.DerbyOnPurchaseRequest(
+                                "دربي " + spec.nameAr(),
+                                null,
+                                List.of(
+                                        new DerbyService.DerbyColorRequest(
+                                                colorIds.get(0), BigDecimal.valueOf(90 + n * 10L)),
+                                        new DerbyService.DerbyColorRequest(
+                                                colorIds.get(Math.min(1, colorIds.size() - 1)),
+                                                BigDecimal.valueOf(60 + n * 5L)))));
 
-                // The pool's opening batch, needed below so a derby cut can draw on it.
-                derbyIntakeByType.put(spec.nameAr(),
-                        intakes.search(typeId, true, false, PageRequest.of(0, 1))
-                                .getContent().getFirst().id());
+                // Needed below, so a derby cut has something to draw on.
+                derbyIntakeByType.put(spec.nameAr(), derbyBatch.id());
             }
             n++;
         }

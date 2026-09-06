@@ -60,23 +60,24 @@
   color: var(--mat-sys-on-surface-variant);
 }
 
-/* A derby colour and its weight sit on one line, with the row's remove button
-   pinned to the end so the fields keep a straight edge as rows are added. */
-.derby-color-row {
+/* One colour per line — with its rolls, its weight, or both — and the row's
+   remove button pinned to the end so the fields keep a straight edge as rows
+   are added. The name gets twice the room of any figure beside it. */
+.color-entry-row {
   display: flex;
   align-items: flex-start;
   gap: 0.5rem;
 }
 
-.derby-color-row mat-form-field:first-child {
-  flex: 2 1 0;
-}
-
-.derby-color-row mat-form-field:nth-child(2) {
+.color-entry-row mat-form-field {
   flex: 1 1 0;
 }
 
-.derby-color-row button {
+.color-entry-row mat-form-field:first-child {
+  flex: 2 1 0;
+}
+
+.color-entry-row button {
   margin-block-start: 0.5rem;
 }
 

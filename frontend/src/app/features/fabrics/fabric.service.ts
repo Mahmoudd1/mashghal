@@ -6,7 +6,8 @@ import { API_BASE_URL } from '../../core/http/api.config';
 import {
   Derby,
   DerbyDefaults,
-  DerbyRequest,
+  DerbyOnPurchaseRequest,
+  DerbyPurchaseRequest,
   FabricColor,
   FabricColorRequest,
   FabricIntake,
@@ -160,9 +161,20 @@ export class FabricService {
 
   // --- derby ---------------------------------------------------------------
 
-  createDerby(fabricTypeId: number, request: DerbyRequest): Observable<Derby> {
+  /** Records the derby bought with an existing fabric purchase. */
+  addDerbyToPurchase(intakeId: number, request: DerbyOnPurchaseRequest): Observable<FabricIntake> {
     return this.http
-      .post<Derby>(`${this.baseUrl}/fabric-types/${fabricTypeId}/derby`, request)
+      .post<FabricIntake>(`${this.baseUrl}/intakes/${intakeId}/derby`, request)
+      .pipe(tap(() => this.reloadAll()));
+  }
+
+  /** Records a derby bought on its own, against the fabric type. */
+  recordDerbyPurchase(
+    fabricTypeId: number,
+    request: DerbyPurchaseRequest,
+  ): Observable<FabricIntake> {
+    return this.http
+      .post<FabricIntake>(`${this.baseUrl}/fabric-types/${fabricTypeId}/derby-purchases`, request)
       .pipe(tap(() => this.reloadAll()));
   }
 

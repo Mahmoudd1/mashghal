@@ -202,6 +202,7 @@
           <ng-container matColumnDef="type">
             <th mat-header-cell *matHeaderCellDef>{{ 'fabric.type' | translate }}</th>
             <td mat-cell *matCellDef="let row">{{ typeName(row) }}</td>
+            <td mat-footer-cell *matFooterCellDef>{{ 'common.total' | translate }}</td>
           </ng-container>
 
           <ng-container matColumnDef="pool">
@@ -209,11 +210,13 @@
             <td mat-cell *matCellDef="let row">
               {{ (row.pool === 'DERBY' ? 'fabric.poolDerby' : 'fabric.poolRegular') | translate }}
             </td>
+            <td mat-footer-cell *matFooterCellDef></td>
           </ng-container>
 
           <ng-container matColumnDef="batches">
             <th mat-header-cell *matHeaderCellDef>{{ 'fabric.batches' | translate }}</th>
             <td mat-cell *matCellDef="let row" class="numeric">{{ row.batchCount }}</td>
+            <td mat-footer-cell *matFooterCellDef class="numeric">{{ fabricTotalBatches() }}</td>
           </ng-container>
 
           <ng-container matColumnDef="rolls">
@@ -221,6 +224,7 @@
             <td mat-cell *matCellDef="let row" class="numeric">
               {{ row.remainingRolls }} / {{ row.totalRolls }}
             </td>
+            <td mat-footer-cell *matFooterCellDef></td>
           </ng-container>
 
           <ng-container matColumnDef="quantity">
@@ -230,6 +234,8 @@
               {{ row.totalQuantity | number: '1.0-3' }}
               {{ 'unit.' + row.unit | translate }}
             </td>
+            <!-- Not summed: one type is priced per kilo, another per metre. -->
+            <td mat-footer-cell *matFooterCellDef></td>
           </ng-container>
 
           <!-- Only reached when stockColumns() includes 'cost', i.e. for the owner. -->
@@ -238,10 +244,19 @@
             <td mat-cell *matCellDef="let row" class="numeric">
               {{ row.totalCost !== null ? (row.totalCost | number: '1.0-2') : '—' }}
             </td>
+            <td mat-footer-cell *matFooterCellDef class="numeric footer-total">
+              {{ fabricTotalCost() !== null ? (fabricTotalCost() | number: '1.0-2') : '—' }}
+            </td>
           </ng-container>
 
           <tr mat-header-row *matHeaderRowDef="stockColumns()"></tr>
           <tr mat-row *matRowDef="let row; columns: stockColumns()"></tr>
+          <!-- Nothing to total when nothing is listed. -->
+          <tr
+            mat-footer-row
+            *matFooterRowDef="stockColumns()"
+            [class.row-hidden]="reports.fabricStock.value().length === 0"
+          ></tr>
         </table>
       </div>
 

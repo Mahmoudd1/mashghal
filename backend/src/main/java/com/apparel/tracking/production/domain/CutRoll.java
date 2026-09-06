@@ -45,9 +45,18 @@ public class CutRoll extends BaseEntity {
     @Column(name = "layers", nullable = false)
     private int layers;
 
-    /** Unusable leftover from cutting this roll — the "waste". */
+    /** Unusable fabric from within what was cut — the cutting defect. */
     @Column(name = "defect_weight", nullable = false, precision = 14, scale = 3)
     private BigDecimal defectWeight = BigDecimal.ZERO;
+
+    /**
+     * Fabric still on the roll when this run finished it, and thrown away with it.
+     *
+     * <p>Distinct from {@link #defectWeight}, which is spoilage inside what the
+     * cut actually used. This never reached the table at all.
+     */
+    @Column(name = "waste_weight", nullable = false, precision = 14, scale = 3)
+    private BigDecimal wasteWeight = BigDecimal.ZERO;
 
     @Column(name = "weight_at_start", nullable = false, precision = 14, scale = 3)
     private BigDecimal weightAtStart;
@@ -69,13 +78,24 @@ public class CutRoll extends BaseEntity {
      * Sets the weights from what the roll held and how much this cut used.
      *
      * <p>Used weight is the input because that is what gets weighed at the table;
-     * the remainder is arithmetic. Finishing the roll means it used everything
-     * left on it, so the figure is not asked for at all in that case.
+     * everything else is arithmetic. What happens to the balance the cut did not
+     * use is the whole question, and it depends on whether the roll is finished:
      *
-     * @param weightUsed ignored when {@code done} — a finished roll uses its whole balance
+     * <ul>
+     *   <li><b>Open</b> — the balance stays on the roll as {@code remainingAfter},
+     *       waiting for the next cut.</li>
+     *   <li><b>Finished</b> — the roll is gone, so the balance goes with it and is
+     *       recorded as {@code wasteWeight}. Finishing a roll does not mean the cut
+     *       used every gram of it.</li>
+     * </ul>
+     *
+     * @param weightUsed what this cut took off the roll. Omitting it while finishing
+     *                   the roll means the cut used the whole balance, wasting none.
      */
     public void applyWeights(BigDecimal weightAtStart, BigDecimal weightUsed, boolean done) {
-        BigDecimal used = done ? weightAtStart : weightUsed;
+        // A finished roll with no figure given used all of it — the old behaviour,
+        // and still the right reading of "done" when nobody weighed a leftover.
+        BigDecimal used = weightUsed != null ? weightUsed : (done ? weightAtStart : null);
 
         if (used == null || used.signum() <= 0) {
             throw new BusinessRuleException("cut_roll_nothing_consumed",
@@ -86,11 +106,19 @@ public class CutRoll extends BaseEntity {
                     "The roll held %s, so this cut cannot have used %s".formatted(weightAtStart, used));
         }
 
+        BigDecimal leftover = weightAtStart.subtract(used);
+
         this.weightAtStart = weightAtStart;
         this.weightConsumed = used;
-        // Derived, never entered: the two can then never contradict each other.
-        this.remainingAfter = weightAtStart.subtract(used);
         // Using every last gram finishes the roll whether or not the box was ticked.
-        this.done = done || this.remainingAfter.signum() == 0;
+        this.done = done || leftover.signum() == 0;
+        // Derived, never entered: the three can then never contradict each other.
+        this.wasteWeight = this.done ? leftover : BigDecimal.ZERO;
+        this.remainingAfter = this.done ? BigDecimal.ZERO : leftover;
+    }
+
+    /** Everything this run took off the roll, cut or thrown away. */
+    public BigDecimal weightOffTheRoll() {
+        return weightConsumed.add(wasteWeight);
     }
 }

@@ -28,6 +28,9 @@ import { Observable, of, switchMap } from 'rxjs';
 
 import { toIsoDate } from '../../../shared/date-utils';
 import { ProductionService } from '../production.service';
+import { NumericFieldDirective } from '../../../shared/numerals/numeric-field.directive';
+import { ArabicDigitsDirective } from '../../../shared/numerals/arabic-digits.directive';
+import { toWesternDigits } from '../../../shared/numerals/arabic-numerals';
 
 export interface CutDialogData {
   /** Absent when creating. */
@@ -49,6 +52,8 @@ export interface CutDialogData {
     MatSelectModule,
     TranslatePipe,
     LocalizedNamePipe,
+    NumericFieldDirective,
+    ArabicDigitsDirective,
   ],
   templateUrl: './cut-dialog.html',
   styleUrl: '../../fabrics/dialogs/dialog-form.scss',
@@ -204,7 +209,7 @@ export class CutDialog {
       cutDate: toIsoDate(raw.cutDate),
       cutLength: raw.cutLength,
       modelDescription: raw.modelDescription.trim() || null,
-      modelNumber: raw.modelNumber.trim() || null,
+      modelNumber: toWesternDigits(raw.modelNumber).trim() || null,
       modelNameAr: raw.modelNameAr.trim() || null,
       modelSewingBranchId: raw.modelSewingBranchId,
       labelAr: raw.labelAr.trim() || null,

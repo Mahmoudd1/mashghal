@@ -50,6 +50,7 @@ import org.springframework.boot.ApplicationArguments;
 import org.springframework.boot.ApplicationRunner;
 import org.springframework.boot.autoconfigure.condition.ConditionalOnProperty;
 import org.springframework.core.annotation.Order;
+import org.springframework.data.domain.PageRequest;
 import org.springframework.stereotype.Component;
 import org.springframework.transaction.annotation.Transactional;
 
@@ -216,10 +217,6 @@ public class DemoDataSeeder implements ApplicationRunner {
                 colorIds.add(colorId);
             }
 
-            if (spec.withDerby()) {
-                derbies.create(typeId, new DerbyService.DerbyRequest("دربي " + spec.nameAr()));
-            }
-
             // Two purchases of regular stock on different dates, at different prices.
             int rolls = 120 + (n * 40);
             // Two purchases from *different* suppliers at different prices, so the
@@ -245,13 +242,23 @@ public class DemoDataSeeder implements ApplicationRunner {
                 assigned += count;
             }
 
+            // The derby is created last, and with fabric already in it: colours and
+            // a weight each, taking its supplier and price from the purchases above
+            // rather than restating them. Both are left null here to exercise that.
             if (spec.withDerby()) {
-                FabricIntakeDto derbyBatch = intakes.create(new FabricIntakeRequest(
-                        typeId, true, firstSupplier, today.minusDays(35 - n * 3L), 25 + n * 5,
-                        BigDecimal.valueOf((25 + n * 5) * 8L), BigDecimal.valueOf(48.0 + n * 2), "دربي"));
-                intakes.setColorBreakdown(derbyBatch.id(),
-                        new FabricIntakeColorRequest(colorIds.get(0), 10, null));
-                derbyIntakeByType.put(spec.nameAr(), derbyBatch.id());
+                derbies.create(typeId, new DerbyService.DerbyRequest(
+                        "دربي " + spec.nameAr(), null, null,
+                        List.of(
+                                new DerbyService.DerbyColorRequest(
+                                        colorIds.get(0), BigDecimal.valueOf(90 + n * 10L)),
+                                new DerbyService.DerbyColorRequest(
+                                        colorIds.get(Math.min(1, colorIds.size() - 1)),
+                                        BigDecimal.valueOf(60 + n * 5L)))));
+
+                // The pool's opening batch, needed below so a derby cut can draw on it.
+                derbyIntakeByType.put(spec.nameAr(),
+                        intakes.search(typeId, true, false, PageRequest.of(0, 1))
+                                .getContent().getFirst().id());
             }
             n++;
         }
@@ -312,17 +319,20 @@ public class DemoDataSeeder implements ApplicationRunner {
      * loudly if that rule were wrong.
      */
     private void allocateFabric(Map<String, Long> cutIds, FabricSeed fabric) {
+        // `used` is what the cut took off the roll; null means it took the lot.
         record Draw(String cut, String fabricType, String colour, double weight, int layers,
-                    double defect, boolean done, double remaining, boolean derby) {}
+                    double defect, boolean done, Double used, boolean derby) {}
 
         List<Draw> draws = List.of(
-                new Draw("CUT-1", "قطن", "أبيض", 9.5, 40, 0.4, true, 0, false),
-                // Left open on purpose: 2.5 kg stays on this roll.
-                new Draw("CUT-1", "قطن", "كحلي", 10.0, 30, 0.3, false, 2.5, false),
-                new Draw("CUT-1S", "قطن", "أبيض", 8.0, 12, 0.2, true, 0, false),
-                new Draw("CUT-2", "جينز", "أزرق غامق", 11.0, 45, 0.6, true, 0, false),
-                new Draw("CUT-3", "كتان", "أوف وايت", 9.0, 25, 0.35, true, 0, false),
-                new Draw("CUT-2D", "جينز", "أزرق فاتح", 7.5, 15, 0.25, true, 0, true));
+                new Draw("CUT-1", "قطن", "أبيض", 9.5, 40, 0.4, true, null, false),
+                // Left open on purpose: 7.5 kg used, so 2.5 kg stays on this roll.
+                new Draw("CUT-1", "قطن", "كحلي", 10.0, 30, 0.3, false, 7.5, false),
+                new Draw("CUT-1S", "قطن", "أبيض", 8.0, 12, 0.2, true, null, false),
+                // Finished with fabric still on it: 10.4 kg cut, 0.6 kg binned
+                // with the roll. This is the case that gives a batch its waste.
+                new Draw("CUT-2", "جينز", "أزرق غامق", 11.0, 45, 0.6, true, 10.4, false),
+                new Draw("CUT-3", "كتان", "أوف وايت", 9.0, 25, 0.35, true, null, false),
+                new Draw("CUT-2D", "جينز", "أزرق فاتح", 7.5, 15, 0.25, true, null, true));
 
         for (Draw draw : draws) {
             Long intakeId = draw.derby()
@@ -340,7 +350,7 @@ public class DemoDataSeeder implements ApplicationRunner {
                     draw.layers(),
                     BigDecimal.valueOf(draw.defect()),
                     draw.done(),
-                    BigDecimal.valueOf(draw.remaining()),
+                    draw.used() == null ? null : BigDecimal.valueOf(draw.used()),
                     null));
         }
     }

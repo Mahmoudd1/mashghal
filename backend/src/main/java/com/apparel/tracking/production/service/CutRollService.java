@@ -137,24 +137,36 @@ public class CutRollService {
 
     // --- the two-dimensional bookkeeping -------------------------------------
 
-    /** Applies a line: weight always, roll count only when it finishes the roll. */
+    /**
+     * Applies a line: weight always, roll count only when it finishes the roll.
+     *
+     * <p>Two things come off the roll, not one. What the cut used is consumption;
+     * what was still on the roll when the cut closed it is waste. Both leave the
+     * batch, but they leave by different doors, so that "consumed" keeps meaning
+     * fabric that became garments.
+     */
     private void apply(CutRoll line) {
         FabricRoll roll = line.getFabricRoll();
         FabricIntake intake = roll.getIntake();
 
         BigDecimal available = roll.getRemainingWeight();
-        if (line.getWeightConsumed().compareTo(available) > 0) {
+        BigDecimal offTheRoll = line.weightOffTheRoll();
+        if (offTheRoll.compareTo(available) > 0) {
             throw new BusinessRuleException("roll_insufficient_weight",
-                    "Roll %s holds %s, cannot consume %s"
-                            .formatted(roll.displayName(), available, line.getWeightConsumed()));
+                    "Roll %s holds %s, cannot take %s off it"
+                            .formatted(roll.displayName(), available, offTheRoll));
         }
 
-        roll.setRemainingWeight(available.subtract(line.getWeightConsumed()));
+        // Finishing a roll takes its whole balance, so this lands on zero of its
+        // own accord — no need to force it, which is what lets reverse() undo it.
+        roll.setRemainingWeight(available.subtract(offTheRoll));
         intake.consumeWeight(line.getWeightConsumed());
+        if (line.getWasteWeight().signum() > 0) {
+            intake.wasteWeight(line.getWasteWeight());
+        }
 
         if (line.isDone()) {
             roll.setClosed(true);
-            roll.setRemainingWeight(BigDecimal.ZERO);
             // The one and only moment the batch's roll count moves.
             intake.consumeRoll();
         }
@@ -169,8 +181,11 @@ public class CutRollService {
             roll.setClosed(false);
             intake.releaseRoll();
         }
-        roll.setRemainingWeight(roll.getRemainingWeight().add(line.getWeightConsumed()));
+        roll.setRemainingWeight(roll.getRemainingWeight().add(line.weightOffTheRoll()));
         intake.releaseWeight(line.getWeightConsumed());
+        if (line.getWasteWeight().signum() > 0) {
+            intake.releaseWaste(line.getWasteWeight());
+        }
     }
 
     // --- helpers -------------------------------------------------------------

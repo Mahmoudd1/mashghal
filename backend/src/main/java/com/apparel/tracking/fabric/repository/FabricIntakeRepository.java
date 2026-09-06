@@ -17,6 +17,24 @@ public interface FabricIntakeRepository extends JpaRepository<FabricIntake, Long
 
     boolean existsByDerbyId(Long derbyId);
 
+    /**
+     * The fabric type's most recent regular purchase, newest first.
+     *
+     * <p>What a derby of that fabric inherits its supplier and price from: the
+     * derby is bought alongside the main fabric, so repeating those two figures
+     * by hand is transcription, not information. Regular stock only — a derby
+     * must not inherit from an earlier derby, or the first one's price would
+     * propagate forward for ever.
+     */
+    @Query("""
+            select i from FabricIntake i
+              left join fetch i.supplier
+            where i.fabricType.id = :fabricTypeId
+              and i.derby is null
+            order by i.intakeDate desc, i.id desc
+            """)
+    List<FabricIntake> latestRegular(@Param("fabricTypeId") Long fabricTypeId, Pageable pageable);
+
     @Query("""
             select i from FabricIntake i
               join fetch i.fabricType

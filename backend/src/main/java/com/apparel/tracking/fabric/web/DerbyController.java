@@ -2,6 +2,7 @@ package com.apparel.tracking.fabric.web;
 
 import java.util.List;
 
+import com.apparel.tracking.fabric.dto.DerbyDefaultsDto;
 import com.apparel.tracking.fabric.dto.DerbyDto;
 import com.apparel.tracking.fabric.service.DerbyService;
 
@@ -43,16 +44,23 @@ public class DerbyController {
         return derbies.getForFabricType(fabricTypeId);
     }
 
+    @GetMapping("/fabric-types/{fabricTypeId}/derby-defaults")
+    @Operation(summary = "Supplier and price a new derby would inherit from this fabric")
+    public DerbyDefaultsDto defaults(@PathVariable Long fabricTypeId) {
+        return derbies.defaultsFor(fabricTypeId);
+    }
+
     @PostMapping("/fabric-types/{fabricTypeId}/derby")
     @ResponseStatus(HttpStatus.CREATED)
-    @Operation(summary = "Give this fabric type a derby pool; at most one, ever")
+    @Operation(summary = "Give this fabric type a derby pool with its opening stock; at most one, ever")
     public DerbyDto create(
             @PathVariable Long fabricTypeId, @Valid @RequestBody DerbyService.DerbyRequest request) {
         return derbies.create(fabricTypeId, request);
     }
 
     @PutMapping("/derbies/{id}")
-    public DerbyDto update(@PathVariable Long id, @Valid @RequestBody DerbyService.DerbyRequest request) {
+    public DerbyDto update(
+            @PathVariable Long id, @Valid @RequestBody DerbyService.DerbyNoteRequest request) {
         return derbies.update(id, request);
     }
 

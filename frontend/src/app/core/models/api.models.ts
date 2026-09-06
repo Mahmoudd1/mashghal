@@ -373,6 +373,12 @@ export interface FabricIntake {
   totalQuantity: number;
   consumedQuantity: number;
   remainingQuantity: number;
+  /** Every roll has come off the batch. Derived from the counters, not stored. */
+  finished: boolean;
+  /** Fabric bought but never cut. Zero until the batch is finished. */
+  wasteQuantity: number;
+  /** That waste as a share of the batch total, to two places. */
+  wastePercentage: number;
   /** Null for anyone but the owner, and null until a price is recorded. */
   pricePerUnit: number | null;
   totalCost: number | null;
@@ -445,8 +451,29 @@ export interface FabricIntakeColorRequest {
   quantity: number | null;
 }
 
+/** One colour a derby is bought as, and how much of it there is. */
+export interface DerbyColorRequest {
+  fabricColorId: number;
+  quantity: number;
+}
+
 export interface DerbyRequest {
   note: string | null;
+  /** Null inherits whoever supplied the fabric last. */
+  supplierId: number | null;
+  /** Null inherits what the fabric last cost. */
+  pricePerUnit: number | null;
+  /** The opening stock; a derby is created with fabric in it. */
+  colors: DerbyColorRequest[];
+}
+
+/** What a new derby would inherit from the fabric it belongs to. */
+export interface DerbyDefaults {
+  supplierId: number | null;
+  supplierNameAr: string | null;
+  /** Null for anyone but the owner, and null until the fabric has been bought. */
+  pricePerUnit: number | null;
+  unit: FabricUnit;
 }
 
 export interface SizeCategory {
@@ -495,7 +522,10 @@ export interface CutRoll {
   weightAtStart: number;
   weightConsumed: number;
   remainingAfter: number;
+  /** Unusable fabric from within what was cut. */
   defectWeight: number;
+  /** Left on the roll when this run finished it, and thrown away with it. */
+  wasteWeight: number;
   done: boolean;
   rollClosed: boolean;
   note: string | null;

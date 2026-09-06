@@ -27,6 +27,7 @@ import { FabricService } from '../../fabrics/fabric.service';
 import { Observable, of, switchMap } from 'rxjs';
 
 import { ProductionService } from '../production.service';
+import { NumericFieldDirective } from '../../../shared/numerals/numeric-field.directive';
 
 export interface CutRollDialogData {
   cut: Cut;
@@ -57,6 +58,7 @@ export interface CutRollDialogData {
     MatInputModule,
     MatSelectModule,
     TranslatePipe,
+    NumericFieldDirective,
   ],
   templateUrl: './cut-roll-dialog.html',
   styleUrl: '../../fabrics/dialogs/dialog-form.scss',
@@ -119,16 +121,13 @@ export class CutRollDialog {
     note: [this.data.cutRoll?.note ?? '', Validators.maxLength(512)],
   });
 
-  private readonly doneValue = toSignal(this.form.controls.done.valueChanges, {
+  protected readonly doneValue = toSignal(this.form.controls.done.valueChanges, {
     initialValue: this.form.controls.done.value,
   });
 
   private readonly batchId = toSignal(this.form.controls.fabricIntakeId.valueChanges, {
     initialValue: this.form.controls.fabricIntakeId.value,
   });
-
-  /** Used weight is only asked for when the roll is not being finished. */
-  protected readonly asksUsedWeight = computed(() => !this.doneValue());
 
   private readonly usedValue = toSignal(this.form.controls.weightUsed.valueChanges, {
     initialValue: this.form.controls.weightUsed.value,
@@ -149,20 +148,31 @@ export class CutRollDialog {
   });
 
   /**
-   * Shown live as the used weight is typed, so the person entering it sees what
-   * will be left before saving rather than after.
+   * What this cut will not use, shown live as the used weight is typed.
+   *
+   * <p>Where it goes depends on the tick box: an open roll keeps it for the next
+   * cut, a finished one is binned with it still on board. Finishing a roll is
+   * not a claim that the cut used every gram — this is the gram count it did
+   * not, and the person entering it sees the figure before saving rather than
+   * discovering it afterwards.
    */
-  protected readonly calculatedRemaining = computed(() => {
+  protected readonly leftover = computed(() => {
     const available = this.availableWeight();
     if (available === null) {
       return null;
     }
-    if (this.doneValue()) {
-      return 0;
-    }
     const used = this.usedValue();
-    return used === null ? null : Math.round((available - used) * 1000) / 1000;
+    if (used === null) {
+      // No figure given: finishing the roll means the cut took all of it.
+      return this.doneValue() ? 0 : null;
+    }
+    return Math.round((available - used) * 1000) / 1000;
   });
+
+  /** True when saving would throw fabric away, which the hint colours as a loss. */
+  protected readonly binsLeftover = computed(
+    () => this.doneValue() === true && (this.leftover() ?? 0) > 0,
+  );
 
   protected readonly selectedBatch = computed(() =>
     this.batches.value().content.find((batch) => batch.id === this.batchId()),
@@ -237,7 +247,8 @@ export class CutRollDialog {
             layers: raw.layers!,
             defectWeight: raw.defectWeight ?? 0,
             done: raw.done,
-            weightUsed: raw.done ? null : raw.weightUsed,
+            // Sent even when finishing: whatever it leaves over is the waste.
+            weightUsed: raw.weightUsed,
             note: raw.note.trim() || null,
           }),
         ),

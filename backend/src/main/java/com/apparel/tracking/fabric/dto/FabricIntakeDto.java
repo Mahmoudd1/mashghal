@@ -13,9 +13,16 @@ import com.apparel.tracking.fabric.domain.FabricUnit;
  * it. Those are different mistakes and get their own fields — exactly one of them
  * is ever non-zero. Both are advisory: neither blocks a save.
  *
+ * <p>{@code finished} says every roll is off the batch, and only then does
+ * {@code wasteQuantity} mean anything: until the last roll goes, the unconsumed
+ * weight is stock, not loss.
+ *
  * @param assignedRolls     rolls named in the colour breakdown
  * @param unassignedRolls   rolls not yet given a colour
  * @param overAssignedRolls rolls assigned beyond what the batch holds
+ * @param finished          every roll has come off the batch
+ * @param wasteQuantity     fabric bought but never cut; zero until finished
+ * @param wastePercentage   that waste as a share of the batch total, to two places
  */
 public record FabricIntakeDto(
         Long id,
@@ -33,6 +40,9 @@ public record FabricIntakeDto(
         BigDecimal totalQuantity,
         BigDecimal consumedQuantity,
         BigDecimal remainingQuantity,
+        boolean finished,
+        BigDecimal wasteQuantity,
+        BigDecimal wastePercentage,
         BigDecimal pricePerUnit,
         BigDecimal totalCost,
         int assignedRolls,
@@ -48,6 +58,7 @@ public record FabricIntakeDto(
                 supplierId, supplierNameAr, intakeDate,
                 totalRolls, consumedRolls, remainingRolls,
                 totalQuantity, consumedQuantity, remainingQuantity,
+                finished, wasteQuantity, wastePercentage,
                 null, null,
                 assignedRolls, unassignedRolls, overAssignedRolls, note, colorBreakdown);
     }
@@ -70,6 +81,9 @@ public record FabricIntakeDto(
                 intake.getTotalQuantity(),
                 intake.getConsumedQuantity(),
                 intake.remainingQuantity(),
+                intake.isFinished(),
+                intake.wasteQuantity(),
+                intake.wastePercentage(),
                 intake.getPricePerUnit(),
                 intake.totalCost(),
                 assigned,

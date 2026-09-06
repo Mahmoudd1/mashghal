@@ -22,6 +22,8 @@ public record CutRollDto(
         BigDecimal weightConsumed,
         BigDecimal remainingAfter,
         BigDecimal defectWeight,
+        /** Left on the roll when this run finished it, and thrown away with it. */
+        BigDecimal wasteWeight,
         boolean done,
         boolean rollClosed,
         String note) {
@@ -45,6 +47,7 @@ public record CutRollDto(
                 cutRoll.getWeightConsumed(),
                 cutRoll.getRemainingAfter(),
                 cutRoll.getDefectWeight(),
+                cutRoll.getWasteWeight(),
                 cutRoll.isDone(),
                 roll.isClosed(),
                 cutRoll.getNote());

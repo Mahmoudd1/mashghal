@@ -19,6 +19,7 @@ import { filterByName, findExact } from '../../../shared/lookup-autocomplete/loo
 import { toIsoDate } from '../../../shared/date-utils';
 import { SupplierService } from '../../suppliers/supplier.service';
 import { FabricService } from '../fabric.service';
+import { NumericFieldDirective } from '../../../shared/numerals/numeric-field.directive';
 
 export interface IntakeDialogData {
   /** Absent when recording a new purchase. */
@@ -52,6 +53,7 @@ export interface IntakeDialogData {
     MatInputModule,
     MatSelectModule,
     TranslatePipe,
+    NumericFieldDirective,
   ],
   templateUrl: './intake-dialog.html',
   styleUrl: './dialog-form.scss',

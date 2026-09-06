@@ -137,10 +137,12 @@ public class FabricIntakeService {
                     "%d rolls have already been cut from this batch, so the total cannot drop to %d"
                             .formatted(intake.getConsumedRolls(), request.totalRolls()));
         }
-        if (request.totalQuantity().compareTo(intake.getConsumedQuantity()) < 0) {
+        // Wasted fabric is as gone as cut fabric, so the total has to cover both.
+        BigDecimal accountedFor = intake.getConsumedQuantity().add(intake.getWastedQuantity());
+        if (request.totalQuantity().compareTo(accountedFor) < 0) {
             throw new BusinessRuleException("intake_below_consumed_quantity",
-                    "%s has already been cut from this batch, so the total cannot drop to %s"
-                            .formatted(intake.getConsumedQuantity(), request.totalQuantity()));
+                    "%s has already left this batch, so the total cannot drop to %s"
+                            .formatted(accountedFor, request.totalQuantity()));
         }
 
         applyEditableFields(intake, request);
@@ -149,7 +151,9 @@ public class FabricIntakeService {
 
     public void delete(Long id) {
         FabricIntake intake = require(id);
-        if (intake.getConsumedRolls() > 0 || intake.getConsumedQuantity().signum() > 0) {
+        if (intake.getConsumedRolls() > 0
+                || intake.getConsumedQuantity().signum() > 0
+                || intake.getWastedQuantity().signum() > 0) {
             throw new BusinessRuleException("intake_already_allocated",
                     "Fabric from this batch has been cut and the batch can no longer be deleted");
         }

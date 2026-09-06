@@ -27,6 +27,12 @@ describe('lookup filtering', () => {
     expect(findExact(options, ' قُطن ', nameOf)).toEqual({ name: 'قطن' });
   });
 
+  it('finds a record whose digits were typed in the other script', () => {
+    const models = [{ name: '500' }];
+    expect(findExact(models, '٥٠٠', nameOf)).toEqual({ name: '500' });
+    expect(filterByName(models, '٥٠', nameOf)).toHaveLength(1);
+  });
+
   it('returns nothing for a genuinely new name', () => {
     expect(findExact(options, 'كتان', nameOf)).toBeUndefined();
   });

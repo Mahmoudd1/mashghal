@@ -9,6 +9,7 @@ import { TranslatePipe } from '@ngx-translate/core';
 
 import { Supplier } from '../../core/models/api.models';
 import { SupplierService } from './supplier.service';
+import { ArabicDigitsDirective } from '../../shared/numerals/arabic-digits.directive';
 
 export interface SupplierDialogData {
   /** Absent when adding. */
@@ -26,6 +27,7 @@ export interface SupplierDialogData {
     MatFormFieldModule,
     MatInputModule,
     TranslatePipe,
+    ArabicDigitsDirective,
   ],
   template: `
     <h2 mat-dialog-title>{{ (data.supplier ? 'supplier.edit' : 'supplier.add') | translate }}</h2>
@@ -43,7 +45,7 @@ export interface SupplierDialogData {
 
         <mat-form-field appearance="outline">
           <mat-label>{{ 'supplier.phone' | translate }}</mat-label>
-          <input matInput formControlName="phone" dir="ltr" inputmode="tel" />
+          <input matInput appArabicDigits formControlName="phone" dir="ltr" inputmode="tel" />
         </mat-form-field>
 
         <mat-form-field appearance="outline">

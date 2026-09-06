@@ -251,6 +251,9 @@
                 >({{ 'cut.defectWeight' | translate }}: {{ roll.defectWeight }})</span
               >
             }
+            @if (roll.wasteWeight) {
+              <span class="muted">({{ 'cut.rollWaste' | translate }}: {{ roll.wasteWeight }})</span>
+            }
             @if (roll.done) {
               <mat-chip class="chip-done">{{ 'cut.done' | translate }}</mat-chip>
             } @else {

@@ -11,6 +11,7 @@ import { TranslatePipe } from '@ngx-translate/core';
 import { ProductionModel } from '../../../core/models/api.models';
 import { ReferenceService } from '../../../core/models/reference.service';
 import { ProductionService } from '../production.service';
+import { ArabicDigitsDirective } from '../../../shared/numerals/arabic-digits.directive';
 
 export interface ModelDialogData {
   /** Absent when creating. */
@@ -29,6 +30,7 @@ export interface ModelDialogData {
     MatInputModule,
     MatSelectModule,
     TranslatePipe,
+    ArabicDigitsDirective,
   ],
   template: `
     <h2 mat-dialog-title>{{ (data.model ? 'model.edit' : 'model.add') | translate }}</h2>
@@ -36,7 +38,7 @@ export interface ModelDialogData {
       <form [formGroup]="form" class="dialog-form">
         <mat-form-field appearance="outline">
           <mat-label>{{ 'model.number' | translate }}</mat-label>
-          <input matInput formControlName="modelNumber" dir="ltr" />
+          <input matInput appArabicDigits formControlName="modelNumber" dir="ltr" />
         </mat-form-field>
 
         <mat-form-field appearance="outline">

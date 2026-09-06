@@ -41,6 +41,7 @@ public interface FabricIntakeRepository extends JpaRepository<FabricIntake, Long
             select i from FabricIntake i
               join fetch i.fabricType
               left join fetch i.derby d
+              left join fetch i.derbyIntake
             where (:fabricTypeId is null or i.fabricType.id = :fabricTypeId)
               and (:derbyOnly is null
                    or (:derbyOnly = true and d.id is not null)

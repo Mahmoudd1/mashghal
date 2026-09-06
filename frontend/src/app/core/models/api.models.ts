@@ -381,6 +381,10 @@ export interface FabricIntake {
   wasteQuantity: number;
   /** That waste as a share of the batch total, to two places. */
   wastePercentage: number;
+  /** The derby bought with this purchase. Zero when none was. */
+  derbyQuantity: number;
+  /** That derby as a share of the fabric bought with it, to two places. */
+  derbyPercentage: number;
   /** Null for anyone but the owner, and null until a price is recorded. */
   pricePerUnit: number | null;
   totalCost: number | null;

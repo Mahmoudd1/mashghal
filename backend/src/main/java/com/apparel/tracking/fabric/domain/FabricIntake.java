@@ -17,6 +17,7 @@ import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
 import jakarta.persistence.OneToMany;
+import jakarta.persistence.OneToOne;
 import jakarta.persistence.Table;
 
 import lombok.Getter;
@@ -65,6 +66,14 @@ public class FabricIntake extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "parent_intake_id")
     private FabricIntake parentIntake;
+
+    /**
+     * The derby bought with this purchase, if one was. The other end of
+     * {@link #parentIntake}; there is at most one, which the unique index on
+     * parent_intake_id enforces.
+     */
+    @OneToOne(mappedBy = "parentIntake", fetch = FetchType.LAZY)
+    private FabricIntake derbyIntake;
 
     @Column(name = "intake_date", nullable = false)
     private LocalDate intakeDate;
@@ -162,6 +171,27 @@ public class FabricIntake extends BaseEntity {
             return BigDecimal.ZERO;
         }
         return wasteQuantity()
+                .multiply(BigDecimal.valueOf(100))
+                .divide(totalQuantity, 2, RoundingMode.HALF_UP);
+    }
+
+    /** The derby bought with this purchase; zero when none was. */
+    public BigDecimal derbyQuantity() {
+        return derbyIntake == null ? BigDecimal.ZERO : derbyIntake.getTotalQuantity();
+    }
+
+    /**
+     * That derby as a share of the fabric it was bought with, to two places.
+     *
+     * <p>Against the fabric alone, not against fabric plus derby: the question is
+     * how much derby a given quantity of fabric needs, and the fabric is what the
+     * next purchase will be sized against.
+     */
+    public BigDecimal derbyPercentage() {
+        if (totalQuantity.signum() == 0) {
+            return BigDecimal.ZERO;
+        }
+        return derbyQuantity()
                 .multiply(BigDecimal.valueOf(100))
                 .divide(totalQuantity, 2, RoundingMode.HALF_UP);
     }

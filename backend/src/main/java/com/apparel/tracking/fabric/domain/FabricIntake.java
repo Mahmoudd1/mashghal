@@ -1,6 +1,7 @@
 package com.apparel.tracking.fabric.domain;
 
 import java.math.BigDecimal;
+import java.math.RoundingMode;
 import java.time.LocalDate;
 import java.util.ArrayList;
 import java.util.List;
@@ -75,6 +76,17 @@ public class FabricIntake extends BaseEntity {
     @Column(name = "consumed_quantity", nullable = false, precision = 14, scale = 3)
     private BigDecimal consumedQuantity = BigDecimal.ZERO;
 
+    /**
+     * Fabric that left the batch without being cut: the leftovers thrown away
+     * with rolls as they were finished.
+     *
+     * <p>Kept apart from {@code consumedQuantity} so "consumed" keeps meaning
+     * fabric that went into garments. Both come off the same purchase, so it is
+     * their sum that the batch total has to cover.
+     */
+    @Column(name = "wasted_quantity", nullable = false, precision = 14, scale = 3)
+    private BigDecimal wastedQuantity = BigDecimal.ZERO;
+
     @Column(name = "note", length = 512)
     private String note;
 
@@ -89,8 +101,57 @@ public class FabricIntake extends BaseEntity {
         return totalRolls - consumedRolls;
     }
 
+    /** What is still on the shelf: neither cut nor thrown away. */
     public BigDecimal remainingQuantity() {
-        return totalQuantity.subtract(consumedQuantity);
+        return totalQuantity.subtract(consumedQuantity).subtract(wastedQuantity);
+    }
+
+    /**
+     * True once every roll has come off the batch.
+     *
+     * <p>Derived from the counters rather than stored as a flag. A roll can be
+     * released again when a cut is edited or deleted, and a stored flag would
+     * have to be cleared in every one of those paths — miss one and a batch
+     * stays "finished" while fabric is still on the floor. The subtraction
+     * cannot drift.
+     */
+    public boolean isFinished() {
+        return totalRolls > 0 && consumedRolls >= totalRolls;
+    }
+
+    /**
+     * Fabric that was paid for but never went into a cut.
+     *
+     * <p>While the batch is live this is what has actually been recorded as
+     * thrown away — the leftovers on rolls that were finished. The untouched
+     * weight is not counted: it is still stock on the shelf, and calling it
+     * waste would condemn a batch halfway through its life.
+     *
+     * <p>Once the last roll is gone there is no shelf left to sit on, so
+     * anything the cuts never drew is waste too, recorded or not. That closes
+     * the batch at exactly what was bought: consumed + wasted = total.
+     */
+    public BigDecimal wasteQuantity() {
+        return isFinished()
+                ? totalQuantity.subtract(consumedQuantity).max(BigDecimal.ZERO)
+                : wastedQuantity;
+    }
+
+    /**
+     * Waste as a share of what was bought, to two places.
+     *
+     * <p>Measured against the batch total rather than what was consumed, so it
+     * answers the question the money asks: of the fabric we bought, how much did
+     * we lose? While the batch is live it can only rise, as more rolls are
+     * finished and more leftovers are recorded against it.
+     */
+    public BigDecimal wastePercentage() {
+        if (totalQuantity.signum() == 0) {
+            return BigDecimal.ZERO;
+        }
+        return wasteQuantity()
+                .multiply(BigDecimal.valueOf(100))
+                .divide(totalQuantity, 2, RoundingMode.HALF_UP);
     }
 
     /** What this batch cost, or null while the price is still unknown. */
@@ -126,6 +187,33 @@ public class FabricIntake extends BaseEntity {
                     "Releasing more weight than the %s batch has given out".formatted(intakeDate));
         }
         consumedQuantity = consumedQuantity.subtract(quantity);
+    }
+
+    /**
+     * Throws weight away: the leftover on a roll that a cut has just finished.
+     *
+     * <p>Checked against what is left exactly as consumption is, because fabric
+     * cannot be wasted twice any more than it can be cut twice.
+     */
+    public void wasteWeight(BigDecimal quantity) {
+        if (quantity.signum() <= 0) {
+            throw new BusinessRuleException("intake_waste_not_positive",
+                    "Wasted quantity must be greater than zero");
+        }
+        if (quantity.compareTo(remainingQuantity()) > 0) {
+            throw new BusinessRuleException("intake_insufficient_quantity",
+                    "The %s batch has %s left, cannot waste %s"
+                            .formatted(intakeDate, remainingQuantity(), quantity));
+        }
+        wastedQuantity = wastedQuantity.add(quantity);
+    }
+
+    public void releaseWaste(BigDecimal quantity) {
+        if (quantity.compareTo(wastedQuantity) > 0) {
+            throw new BusinessRuleException("intake_release_exceeds_consumed",
+                    "Releasing more waste than the %s batch has recorded".formatted(intakeDate));
+        }
+        wastedQuantity = wastedQuantity.subtract(quantity);
     }
 
     /**

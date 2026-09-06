@@ -4,7 +4,7 @@
   <form [formGroup]="form" class="dialog-form">
     <mat-form-field appearance="outline">
       <mat-label>{{ 'cut.number' | translate }}</mat-label>
-      <input matInput formControlName="cutNumber" dir="ltr" />
+      <input matInput appArabicDigits formControlName="cutNumber" dir="ltr" />
     </mat-form-field>
 
     <mat-form-field appearance="outline">

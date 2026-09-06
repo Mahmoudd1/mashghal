@@ -16,9 +16,10 @@ import jakarta.validation.constraints.Size;
  * dated batch. A fresh roll needs its weighed {@code initialWeight}; a continuing
  * one already knows what it holds.
  *
- * @param weightUsed how much of the roll this cut consumed. Ignored when
- *                   {@code done} is true, since finishing a roll uses whatever
- *                   was left on it. The remainder is calculated, not entered.
+ * @param weightUsed how much of the roll this cut consumed. Given while finishing
+ *                   the roll, whatever is left over is thrown away with it and
+ *                   recorded as waste; omitted, the cut is taken to have used the
+ *                   whole balance. The remainder is calculated, not entered.
  */
 public record CutRollRequest(
         Long fabricRollId,

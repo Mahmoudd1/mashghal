@@ -13,6 +13,7 @@ import { LocalizedNamePipe } from '../../../core/i18n/localized-name.pipe';
 import { Cut, CutModelAllocation } from '../../../core/models/api.models';
 import { ReferenceService } from '../../../core/models/reference.service';
 import { ProductionService } from '../production.service';
+import { NumericFieldDirective } from '../../../shared/numerals/numeric-field.directive';
 
 export interface ModelAllocationDialogData {
   cut: Cut;
@@ -40,6 +41,7 @@ export interface ModelAllocationDialogData {
     MatSelectModule,
     TranslatePipe,
     LocalizedNamePipe,
+    NumericFieldDirective,
   ],
   templateUrl: './model-allocation-dialog.html',
   styleUrl: '../../fabrics/dialogs/dialog-form.scss',

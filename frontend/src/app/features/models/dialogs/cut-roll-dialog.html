@@ -105,18 +105,21 @@
 
     <mat-checkbox formControlName="done">{{ 'cut.done' | translate }}</mat-checkbox>
 
-    @if (asksUsedWeight()) {
-      <mat-form-field appearance="outline">
-        <mat-label>{{ 'cut.weightUsed' | translate }}</mat-label>
-        <input matInput type="number" step="0.001" min="0" formControlName="weightUsed" dir="ltr" />
-        <mat-hint>{{ 'cut.weightUsedHint' | translate }}</mat-hint>
-      </mat-form-field>
-    }
+    <!-- Asked even when the roll is being finished: a finished roll has often
+         not been cut to the last gram, and the balance is waste, not use. -->
+    <mat-form-field appearance="outline">
+      <mat-label>{{ 'cut.weightUsed' | translate }}</mat-label>
+      <input matInput type="number" step="0.001" min="0" formControlName="weightUsed" dir="ltr" />
+      <mat-hint>
+        {{ (doneValue() ? 'cut.weightUsedDoneHint' : 'cut.weightUsedHint') | translate }}
+      </mat-hint>
+    </mat-form-field>
 
     <!-- Calculated, never entered, and shown before saving. -->
-    @if (calculatedRemaining() !== null) {
-      <p class="action-hint">
-        {{ 'cut.calculatedRemaining' | translate }}: <strong>{{ calculatedRemaining() }}</strong>
+    @if (leftover() !== null) {
+      <p class="action-hint" [class.waste-hint]="binsLeftover()">
+        {{ (doneValue() ? 'cut.calculatedWaste' : 'cut.calculatedRemaining') | translate }}:
+        <strong>{{ leftover() }}</strong>
       </p>
     }
 

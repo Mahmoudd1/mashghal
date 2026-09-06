@@ -5,6 +5,7 @@ import { Observable, tap } from 'rxjs';
 import { API_BASE_URL } from '../../core/http/api.config';
 import {
   Derby,
+  DerbyDefaults,
   DerbyRequest,
   FabricColor,
   FabricColorRequest,
@@ -173,6 +174,13 @@ export class FabricService {
 
   derbyFor(fabricTypeId: number): Observable<Derby> {
     return this.http.get<Derby>(`${this.baseUrl}/fabric-types/${fabricTypeId}/derby`);
+  }
+
+  /** Supplier and price a new derby would take from the fabric's last purchase. */
+  derbyDefaults(fabricTypeId: number): Observable<DerbyDefaults> {
+    return this.http.get<DerbyDefaults>(
+      `${this.baseUrl}/fabric-types/${fabricTypeId}/derby-defaults`,
+    );
   }
 
   // --- intake --------------------------------------------------------------

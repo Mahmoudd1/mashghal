@@ -20,6 +20,7 @@ import {
   PipelineActionDialogData,
 } from './dialogs/pipeline-action-dialog';
 import { PipelineService } from './pipeline.service';
+import { toWesternDigits } from '../../shared/numerals/arabic-numerals';
 
 /**
  * Stage counts per model per branch, with the actions that move pieces.
@@ -58,14 +59,14 @@ export class PipelinePage {
 
   protected readonly models = computed(() => {
     const branchId = this.branchFilter();
-    const term = this.search().trim().toLowerCase();
+    const term = toWesternDigits(this.search()).trim().toLowerCase();
     let all = this.pipeline.allModels.value();
 
     if (term) {
       all = all.filter(
         (model) =>
-          model.modelNumber.toLowerCase().includes(term) ||
-          model.modelNameAr.toLowerCase().includes(term),
+          toWesternDigits(model.modelNumber).toLowerCase().includes(term) ||
+          toWesternDigits(model.modelNameAr).toLowerCase().includes(term),
       );
     }
     if (branchId === null) {

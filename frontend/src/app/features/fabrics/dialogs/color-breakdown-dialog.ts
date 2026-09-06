@@ -13,6 +13,7 @@ import { Observable, of, switchMap } from 'rxjs';
 import { FabricIntake, FabricIntakeColorRow } from '../../../core/models/api.models';
 import { filterByName, findExact } from '../../../shared/lookup-autocomplete/lookup-filter';
 import { FabricService } from '../fabric.service';
+import { NumericFieldDirective } from '../../../shared/numerals/numeric-field.directive';
 
 export interface ColorBreakdownDialogData {
   intake: FabricIntake;
@@ -41,6 +42,7 @@ export interface ColorBreakdownDialogData {
     MatIconModule,
     MatInputModule,
     TranslatePipe,
+    NumericFieldDirective,
   ],
   template: `
     <h2 mat-dialog-title>{{ 'fabric.addColorBreakdown' | translate }}</h2>

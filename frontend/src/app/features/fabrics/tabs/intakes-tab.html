@@ -56,6 +56,9 @@
           @if (intake.pool === 'DERBY') {
             <mat-chip class="pool-chip">{{ 'fabric.poolDerby' | translate }}</mat-chip>
           }
+          @if (intake.finished) {
+            <mat-chip class="pool-chip chip-closed">{{ 'fabric.finished' | translate }}</mat-chip>
+          }
         </mat-panel-title>
         <mat-panel-description>
           {{ intake.remainingRolls }} / {{ intake.totalRolls }}
@@ -96,6 +99,19 @@
             {{ intake.consumedQuantity | number: '1.0-3' }}
           </span>
         </span>
+        <!-- Only once the last roll is gone: until then the unconsumed weight
+             is stock on the shelf, not fabric anyone lost. -->
+        @if (intake.finished) {
+          <span [matTooltip]="'fabric.wasteHint' | translate">
+            <span class="fact-label">{{ 'fabric.waste' | translate }}</span>
+            <span class="numeric" [class.waste-loss]="intake.wasteQuantity > 0">
+              {{ intake.wasteQuantity | number: '1.0-3' }}
+              {{ 'unit.' + intake.unit | translate }} ({{
+                intake.wastePercentage | number: '1.0-2'
+              }}%)
+            </span>
+          </span>
+        }
       </div>
 
       @if (intake.note) {

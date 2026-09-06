@@ -29,6 +29,11 @@
   font: var(--mat-sys-body-small);
 }
 
+/* Fabric about to be thrown away with the roll should not read as a neutral note. */
+.waste-hint {
+  color: var(--mat-sys-error);
+}
+
 .source-toggle {
   margin-block-end: 0.75rem;
 }
@@ -53,4 +58,29 @@
   margin: 0.5rem 0 0.25rem;
   font: var(--mat-sys-title-small);
   color: var(--mat-sys-on-surface-variant);
+}
+
+/* A derby colour and its weight sit on one line, with the row's remove button
+   pinned to the end so the fields keep a straight edge as rows are added. */
+.derby-color-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.5rem;
+}
+
+.derby-color-row mat-form-field:first-child {
+  flex: 2 1 0;
+}
+
+.derby-color-row mat-form-field:nth-child(2) {
+  flex: 1 1 0;
+}
+
+.derby-color-row button {
+  margin-block-start: 0.5rem;
+}
+
+.add-color-button {
+  align-self: flex-start;
+  margin-block-end: 0.75rem;
 }

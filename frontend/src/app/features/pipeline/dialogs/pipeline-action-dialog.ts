@@ -13,6 +13,7 @@ import { TranslatePipe } from '@ngx-translate/core';
 import { BranchPipeline, ModelPipeline, StageCode } from '../../../core/models/api.models';
 import { toIsoDate } from '../../../shared/date-utils';
 import { PipelineService } from '../pipeline.service';
+import { NumericFieldDirective } from '../../../shared/numerals/numeric-field.directive';
 
 export type PipelineAction = 'receive' | 'sell' | 'move' | 'flag' | 'unflag';
 
@@ -40,6 +41,7 @@ export interface PipelineActionDialogData {
     MatInputModule,
     MatSelectModule,
     TranslatePipe,
+    NumericFieldDirective,
   ],
   templateUrl: './pipeline-action-dialog.html',
   styleUrl: '../../fabrics/dialogs/dialog-form.scss',

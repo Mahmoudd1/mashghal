@@ -11,6 +11,7 @@ import { TranslatePipe } from '@ngx-translate/core';
 import { LocalizedNamePipe } from '../../../core/i18n/localized-name.pipe';
 import { FabricColor, FabricType } from '../../../core/models/api.models';
 import { ConfirmDialog, ConfirmDialogData } from '../../../shared/confirm-dialog/confirm-dialog';
+import { DerbyDialog, DerbyDialogData } from '../dialogs/derby-dialog';
 import { FabricColorDialog, FabricColorDialogData } from '../dialogs/fabric-color-dialog';
 import { FabricTypeDialog, FabricTypeDialogData } from '../dialogs/fabric-type-dialog';
 import { AuthService } from '../../../core/auth/auth.service';
@@ -96,8 +97,12 @@ export class FabricTypesTab {
       .some((row) => row.fabricTypeId === type.id && row.totalRolls > 0);
   }
 
+  /** Creating a derby now means entering the fabric that goes in it. */
   protected createDerby(type: FabricType): void {
-    this.fabrics.createDerby(type.id, { note: null }).subscribe();
+    this.dialog.open<DerbyDialog, DerbyDialogData, boolean>(DerbyDialog, {
+      data: { type },
+      width: '560px',
+    });
   }
 
   protected deleteDerby(type: FabricType): void {

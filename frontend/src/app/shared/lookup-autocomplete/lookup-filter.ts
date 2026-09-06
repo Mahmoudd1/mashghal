@@ -1,3 +1,5 @@
+import { toWesternDigits } from '../numerals/arabic-numerals';
+
 /**
  * Helpers for the "type freely, pick from what already exists" pattern.
  *
@@ -5,12 +7,14 @@
  * existing records are offered, and anything genuinely new is created on save.
  * Matching is deliberately loose — trimmed, case-folded, and Arabic-normalised —
  * so a stray alef hamza or a trailing space does not create a duplicate record
- * that looks identical on screen.
+ * that looks identical on screen. Digits fold too: a model typed as ٥٠٠ has to
+ * find the one already saved as 500, or the user is offered nothing and creates
+ * a second record for the same model.
  */
 
-/** Folds the spellings that differ only by diacritic or hamza form. */
+/** Folds the spellings that differ only by diacritic, hamza form, or numeral. */
 export function normalise(value: string): string {
-  return value
+  return toWesternDigits(value)
     .trim()
     .toLocaleLowerCase()
     .replace(/[ً-ْ]/g, '') // harakat

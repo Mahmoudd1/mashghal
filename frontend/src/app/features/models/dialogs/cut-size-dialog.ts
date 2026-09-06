@@ -15,6 +15,7 @@ import { ReferenceService } from '../../../core/models/reference.service';
 import { filterByName, findExact } from '../../../shared/lookup-autocomplete/lookup-filter';
 import { SizeService } from '../../../core/models/size.service';
 import { ProductionService } from '../production.service';
+import { NumericFieldDirective } from '../../../shared/numerals/numeric-field.directive';
 
 export interface CutSizeDialogData {
   cut: Cut;
@@ -41,6 +42,7 @@ export interface CutSizeDialogData {
     MatInputModule,
     MatSelectModule,
     TranslatePipe,
+    NumericFieldDirective,
   ],
   template: `
     <h2 mat-dialog-title>{{ 'cut.addMarker' | translate }}</h2>

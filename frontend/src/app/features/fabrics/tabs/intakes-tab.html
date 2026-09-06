@@ -119,6 +119,20 @@
             {{ 'unit.' + intake.unit | translate }}
           </span>
         </span>
+        <!-- The derby that came in with this purchase, as a share of it. Shown
+             on the fabric, not on the derby batch: the reading anyone wants is
+             how much derby a given weight of fabric took. -->
+        @if (intake.pool !== 'DERBY' && intake.derbyQuantity > 0) {
+          <span [matTooltip]="'fabric.derbyShareHint' | translate">
+            <span class="fact-label">{{ 'fabric.derbyShare' | translate }}</span>
+            <span class="numeric">
+              {{ intake.derbyQuantity | number: '1.0-3' }}
+              {{ 'unit.' + intake.unit | translate }} ({{
+                intake.derbyPercentage | number: '1.0-2'
+              }}%)
+            </span>
+          </span>
+        }
         <!-- Only once the last roll is gone: until then the unconsumed weight
              is stock on the shelf, not fabric anyone lost. -->
         @if (intake.finished) {

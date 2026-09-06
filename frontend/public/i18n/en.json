@@ -179,7 +179,9 @@
     "priceNotSet": "Not set yet",
     "finished": "Finished",
     "waste": "Waste",
-    "wasteHint": "Fabric that never reached a cut, once every roll was used up"
+    "wasteHint": "Fabric that never reached a cut, once every roll was used up",
+    "derbyShare": "Derby share",
+    "derbyShareHint": "The derby bought with this purchase, against the weight of the fabric itself"
   },
   "model": {
     "label": "Model",

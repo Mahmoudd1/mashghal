@@ -23,6 +23,8 @@ import com.apparel.tracking.fabric.domain.FabricUnit;
  * @param finished          every roll has come off the batch
  * @param wasteQuantity     fabric bought but never cut; zero until finished
  * @param wastePercentage   that waste as a share of the batch total, to two places
+ * @param derbyQuantity     the derby bought with this purchase; zero when none was
+ * @param derbyPercentage   that derby as a share of the fabric, to two places
  */
 public record FabricIntakeDto(
         Long id,
@@ -45,6 +47,8 @@ public record FabricIntakeDto(
         boolean finished,
         BigDecimal wasteQuantity,
         BigDecimal wastePercentage,
+        BigDecimal derbyQuantity,
+        BigDecimal derbyPercentage,
         BigDecimal pricePerUnit,
         BigDecimal totalCost,
         int assignedRolls,
@@ -61,6 +65,7 @@ public record FabricIntakeDto(
                 totalRolls, consumedRolls, remainingRolls,
                 totalQuantity, consumedQuantity, remainingQuantity,
                 finished, wasteQuantity, wastePercentage,
+                derbyQuantity, derbyPercentage,
                 null, null,
                 assignedRolls, unassignedRolls, overAssignedRolls, note, colorBreakdown);
     }
@@ -87,6 +92,8 @@ public record FabricIntakeDto(
                 intake.isFinished(),
                 intake.wasteQuantity(),
                 intake.wastePercentage(),
+                intake.derbyQuantity(),
+                intake.derbyPercentage(),
                 intake.getPricePerUnit(),
                 intake.totalCost(),
                 assigned,

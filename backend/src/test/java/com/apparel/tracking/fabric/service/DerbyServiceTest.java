@@ -115,8 +115,14 @@ class DerbyServiceTest {
                 DERBY_BATCH_ID, TYPE_ID, "قطن", null, FabricUnit.KG, null, null, null,
                 BOUGHT_ON, null, 2, 0, 2,
                 new BigDecimal("150.000"), BigDecimal.ZERO, new BigDecimal("150.000"),
+                // finished, then waste and its share
                 false, BigDecimal.ZERO, BigDecimal.ZERO,
-                null, null, 0, 0, 0, null, List.of());
+                // the derby bought with this purchase, and its share: none, because
+                // this batch is itself the derby
+                BigDecimal.ZERO, BigDecimal.ZERO,
+                // price per unit, total cost
+                null, null,
+                0, 0, 0, null, List.of());
     }
 
     private static DerbyColorRequest colour(long colorId, String quantity) {

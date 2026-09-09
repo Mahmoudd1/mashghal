@@ -85,3 +85,70 @@
   align-self: flex-start;
   margin-block-end: 0.75rem;
 }
+
+/* One model on a cut: its number, and the sizes a layer yields of it. */
+.model-card {
+  border: 1px solid var(--mat-sys-outline-variant, rgba(0, 0, 0, 0.12));
+  border-radius: 8px;
+  padding: 12px;
+  margin-bottom: 12px;
+  display: flex;
+  flex-direction: column;
+}
+
+.model-card-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.model-card-head .grow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+/* What one layer yields — per model in the head, per cut in the heading. */
+.per-layer-chip,
+.section-total {
+  font-size: 0.85rem;
+  font-weight: 600;
+  white-space: nowrap;
+  opacity: 0.75;
+}
+
+.section-total {
+  margin-inline-start: 8px;
+}
+
+.size-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.size-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.size-row .grow {
+  flex: 1 1 auto;
+  min-width: 0;
+}
+
+.size-row .narrow {
+  flex: 0 0 8.5rem;
+}
+
+.soft-warning {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  margin: 4px 0;
+  font-size: 0.85rem;
+}
+
+.soft-warning-strong {
+  color: var(--mat-sys-error, #b3261e);
+}

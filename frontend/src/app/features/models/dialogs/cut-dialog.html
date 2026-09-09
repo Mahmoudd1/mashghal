@@ -74,52 +74,165 @@
       </mat-form-field>
     }
 
-    <!-- The model is named here because opening a cut is normally where a
-         model first exists; a new number is created along with the cut. -->
-    <h3 class="dialog-section">{{ 'cut.modelSection' | translate }}</h3>
-
-    <mat-form-field appearance="outline">
-      <mat-label>{{ 'model.number' | translate }}</mat-label>
-      <input
-        matInput
-        formControlName="modelNumber"
-        [matAutocomplete]="modelAuto"
-        autocomplete="off"
-      />
-      <mat-autocomplete #modelAuto="matAutocomplete">
-        @for (model of modelSuggestions(); track model.id) {
-          <mat-option [value]="model.modelNumber">
-            {{ model.modelNumber }}
-            <span class="option-hint">{{ model.nameAr }}</span>
-          </mat-option>
-        }
-      </mat-autocomplete>
-      @if (matchedModel()) {
-        <mat-hint>{{ 'cut.modelExistsHint' | translate }}</mat-hint>
+    <!-- Every model this one cutting run produces. The first is the cut's own;
+         the rest are the second and third laid out on the same table. -->
+    <h3 class="dialog-section">
+      {{ 'cut.modelsSection' | translate }}
+      @if (totalPerLayer() > 0) {
+        <span class="section-total">
+          {{ totalPerLayer() }} {{ 'cut.piecesPerLayer' | translate }}
+        </span>
       }
-    </mat-form-field>
+    </h3>
 
-    @if (creatingModel()) {
-      <p class="creating-hint">
-        <mat-icon inline>add_circle</mat-icon>
-        {{ 'cut.modelCreatedHint' | translate }}
-      </p>
+    <div formArrayName="models">
+      @for (model of modelRows; track modelIndex; let modelIndex = $index) {
+        <div class="model-card" [formGroupName]="modelIndex">
+          <div class="model-card-head">
+            <mat-form-field appearance="outline" class="grow">
+              <mat-label>{{ 'model.number' | translate }}</mat-label>
+              <input
+                matInput
+                formControlName="modelNumber"
+                [matAutocomplete]="modelAuto"
+                autocomplete="off"
+                dir="ltr"
+              />
+              <mat-autocomplete #modelAuto="matAutocomplete">
+                @for (suggestion of modelSuggestionsAt(modelIndex); track suggestion.id) {
+                  <mat-option [value]="suggestion.modelNumber">
+                    {{ suggestion.modelNumber }}
+                    <span class="option-hint">{{ suggestion.nameAr }}</span>
+                  </mat-option>
+                }
+              </mat-autocomplete>
+              @if (matchedModelAt(modelIndex)) {
+                <mat-hint>{{ 'cut.modelExistsHint' | translate }}</mat-hint>
+              }
+            </mat-form-field>
 
-      <mat-form-field appearance="outline">
-        <mat-label>{{ 'model.nameAr' | translate }}</mat-label>
-        <input matInput formControlName="modelNameAr" />
-      </mat-form-field>
+            @if (perLayerAt(modelIndex) > 0) {
+              <span class="per-layer-chip">
+                {{ perLayerAt(modelIndex) }} {{ 'cut.piecesPerLayer' | translate }}
+              </span>
+            }
 
-      <mat-form-field appearance="outline">
-        <mat-label>{{ 'model.sewingBranch' | translate }}</mat-label>
-        <mat-select formControlName="modelSewingBranchId">
-          <mat-option [value]="null">{{ 'cut.inheritsBranch' | translate }}</mat-option>
-          @for (branch of reference.branches.value(); track branch.id) {
-            <mat-option [value]="branch.id">{{ branch.nameAr }}</mat-option>
+            <!-- The first model is the cut's own and cannot be dropped. -->
+            @if (modelIndex > 0 && !typeLocked) {
+              <button
+                mat-icon-button
+                type="button"
+                [matTooltip]="'cut.removeModel' | translate"
+                (click)="removeModel(modelIndex)"
+              >
+                <mat-icon>close</mat-icon>
+              </button>
+            }
+          </div>
+
+          @if (creatingModelAt(modelIndex)) {
+            <p class="creating-hint">
+              <mat-icon inline>add_circle</mat-icon>
+              {{ 'cut.modelCreatedHint' | translate }}
+            </p>
+
+            <mat-form-field appearance="outline">
+              <mat-label>{{ 'model.nameAr' | translate }}</mat-label>
+              <input matInput formControlName="modelNameAr" />
+            </mat-form-field>
+
+            <mat-form-field appearance="outline">
+              <mat-label>{{ 'model.sewingBranch' | translate }}</mat-label>
+              <mat-select formControlName="sewingBranchId">
+                <mat-option [value]="null">{{ 'cut.inheritsBranch' | translate }}</mat-option>
+                @for (branch of reference.branches.value(); track branch.id) {
+                  <mat-option [value]="branch.id">{{ branch | localizedName }}</mat-option>
+                }
+              </mat-select>
+            </mat-form-field>
           }
-        </mat-select>
-        <mat-hint>{{ 'model.sewingBranchHint' | translate }}</mat-hint>
-      </mat-form-field>
+
+          <!-- Sizes are the marker, and the marker is what pieces derive from.
+               Only offered while creating: an existing cut's marker is edited
+               on the cut, a row at a time. -->
+          @if (!typeLocked) {
+            <div formArrayName="sizes" class="size-rows">
+              @for (size of sizeRows($index); track $index) {
+                <div class="size-row" [formGroupName]="$index">
+                  <mat-form-field appearance="outline" subscriptSizing="dynamic" class="grow">
+                    <mat-label>{{ 'size.label' | translate }}</mat-label>
+                    <mat-select formControlName="garmentSizeId">
+                      @for (category of sizes.categories.value(); track category.id) {
+                        @for (option of category.sizes; track option.id) {
+                          <mat-option [value]="option.id">
+                            {{ option.code }}
+                            <span class="option-hint">{{ category.nameAr }}</span>
+                          </mat-option>
+                        }
+                      }
+                    </mat-select>
+                  </mat-form-field>
+
+                  <mat-form-field appearance="outline" subscriptSizing="dynamic" class="narrow">
+                    <mat-label>{{ 'cut.piecesPerLayer' | translate }}</mat-label>
+                    <input
+                      matInput
+                      type="number"
+                      min="1"
+                      step="1"
+                      formControlName="piecesPerLayer"
+                      dir="ltr"
+                    />
+                  </mat-form-field>
+
+                  <button
+                    mat-icon-button
+                    type="button"
+                    [matTooltip]="'common.delete' | translate"
+                    (click)="removeSize(modelIndex, $index)"
+                  >
+                    <mat-icon>close</mat-icon>
+                  </button>
+                </div>
+              }
+            </div>
+
+            @if (duplicateSize(modelIndex)) {
+              <p class="soft-warning soft-warning-strong">
+                <mat-icon inline>warning</mat-icon>
+                {{ 'cut.duplicateSize' | translate }}
+              </p>
+            }
+            @if (sizesWithoutModel(modelIndex)) {
+              <p class="soft-warning soft-warning-strong">
+                <mat-icon inline>warning</mat-icon>
+                {{ 'cut.sizesNeedModel' | translate }}
+              </p>
+            }
+
+            <button mat-button type="button" (click)="addSize(modelIndex)">
+              <mat-icon>add</mat-icon>
+              <span>{{ 'cut.addMarker' | translate }}</span>
+            </button>
+          }
+        </div>
+      }
+    </div>
+
+    @if (duplicateModel()) {
+      <p class="soft-warning soft-warning-strong">
+        <mat-icon inline>warning</mat-icon>
+        {{ 'cut.duplicateModel' | translate }}
+      </p>
+    }
+
+    @if (!typeLocked) {
+      <button mat-stroked-button type="button" (click)="addModel()">
+        <mat-icon>add</mat-icon>
+        <span>{{ 'cut.addModel' | translate }}</span>
+      </button>
+
+      <p class="muted">{{ 'cut.derivedHint' | translate }}</p>
     }
 
     <mat-form-field appearance="outline">

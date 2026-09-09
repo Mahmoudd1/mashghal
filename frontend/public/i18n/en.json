@@ -392,6 +392,12 @@
     "modelNumberHint": "Type a new model number and it will be created",
     "newModelName": "Model name (optional)",
     "modelSection": "Model",
+    "modelsSection": "Models",
+    "addModel": "Add another model",
+    "removeModel": "Remove this model",
+    "duplicateModel": "Duplicate model number — enter each model once, with its sizes",
+    "duplicateSize": "That size is already on this model",
+    "sizesNeedModel": "Enter the model number before adding its sizes",
     "modelCreatedHint": "The model will be created with the cut",
     "modelExistsHint": "Existing model — it will be linked"
   },

@@ -392,6 +392,12 @@
     "modelNumberHint": "اكتب رقم موديل جديد وسيتم إنشاؤه",
     "newModelName": "اسم الموديل (اختياري)",
     "modelSection": "الموديل",
+    "modelsSection": "الموديلات",
+    "addModel": "إضافة موديل آخر",
+    "removeModel": "حذف هذا الموديل",
+    "duplicateModel": "رقم الموديل مكرر — كل موديل يُكتب مرة واحدة بمقاساته",
+    "duplicateSize": "المقاس مكرر لنفس الموديل",
+    "sizesNeedModel": "اكتب رقم الموديل قبل إضافة مقاساته",
     "modelCreatedHint": "سيتم إنشاء الموديل مع القصة",
     "modelExistsHint": "موديل موجود — سيتم الربط به"
   },

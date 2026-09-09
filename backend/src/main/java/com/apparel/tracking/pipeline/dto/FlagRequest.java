@@ -19,5 +19,11 @@ public record FlagRequest(
         String stageCode,
         @NotNull @Min(1) Integer quantity,
         @Size(max = 512) String reason,
+        /**
+         * Which size these pieces are. Optional: omitted, the action applies to
+         * the pieces recorded without a size, which is what a model that was
+         * never entered size by size has.
+         */
+        Long garmentSizeId,
         @NotNull @PastOrPresent LocalDate eventDate) {
 }

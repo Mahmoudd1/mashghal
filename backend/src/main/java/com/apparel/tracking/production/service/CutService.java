@@ -19,6 +19,7 @@ import com.apparel.tracking.production.domain.CutRoll;
 import com.apparel.tracking.production.domain.CutStatus;
 import com.apparel.tracking.production.domain.CutType;
 import com.apparel.tracking.production.domain.Model;
+import com.apparel.tracking.production.domain.ModelRole;
 import com.apparel.tracking.production.dto.CutDto;
 import com.apparel.tracking.production.dto.CutModelAllocationDto;
 import com.apparel.tracking.production.dto.CutModelAllocationRequest;
@@ -257,8 +258,10 @@ public class CutService {
 
         // Allocated pieces are the model's plan, so the pipeline moves with them:
         // the difference enters (or leaves) the CUTTING stage for this branch.
+        // No size: this path only runs for a cut with no marker, so there is no
+        // size breakdown to attribute the pieces to.
         pipeline.applyAllocationDelta(
-                model, branch, request.quantityAllocated() - previousQuantity, cut.getCutDate());
+                model, branch, null, request.quantityAllocated() - previousQuantity, cut.getCutDate());
 
         audit.record(
                 existing.isPresent() ? AuditService.MODEL_ALLOCATION_CHANGED : AuditService.MODEL_ALLOCATED,
@@ -277,6 +280,7 @@ public class CutService {
         pipeline.applyAllocationDelta(
                 allocation.getModel(),
                 allocation.getBranch(),
+                allocation.getSize(),
                 -allocation.getQuantityAllocated(),
                 allocation.getCut().getCutDate());
 
@@ -374,12 +378,21 @@ public class CutService {
                     "Name the model this size belongs to");
         }
 
-        return models.findByModelNumberIgnoreCase(number).orElseGet(() -> {
+        return models.findByModelNumberIgnoreCase(number)
+                .map(existing -> {
+                    // A model that already exists can still be told it is half of a
+                    // suit — which is the ordinary case, since the cut created it a
+                    // moment ago as its own primary model.
+                    linkToSuit(existing, request.suitModelNumber(), request.role());
+                    return existing;
+                })
+                .orElseGet(() -> {
             Model created = new Model();
             created.setModelNumber(number);
             String name = request.modelNameAr() == null ? "" : request.modelNameAr().trim();
             created.setNameAr(name.isEmpty() ? number : name);
             created.setActive(true);
+            linkToSuit(created, request.suitModelNumber(), request.role());
             return models.save(created);
         });
     }
@@ -405,54 +418,132 @@ public class CutService {
 
         // Sizes inherit the model's sewing branch; failing that, the cut's own.
         Branch fallback = model.getSewingBranch() != null ? model.getSewingBranch() : cut.getBranch();
+
+        // Keyed by branch and size together, because that is the grain the marker
+        // states and the grain the pipeline counts in. Summing to a branch total
+        // here is what used to throw the size away.
+        Map<BranchSize, Integer> wanted = new LinkedHashMap<>();
         Map<Long, Branch> branchesById = new LinkedHashMap<>();
-        Map<Long, Integer> piecesByBranch = new LinkedHashMap<>();
 
         for (CutModelSize row : markerRows) {
             Branch branch = row.getBranch() != null ? row.getBranch() : fallback;
             branchesById.putIfAbsent(branch.getId(), branch);
-            piecesByBranch.merge(branch.getId(), layers * row.getPiecesPerLayer(), Integer::sum);
+            wanted.merge(new BranchSize(branch.getId(), row.getSize().getId()),
+                    layers * row.getPiecesPerLayer(), Integer::sum);
         }
 
-        // Branches that no longer sew any of this model's sizes drop to zero.
         for (CutModelAllocation existing : modelAllocations.findByCut(cut.getId())) {
             if (!existing.getModel().getId().equals(model.getId())) {
                 continue;
             }
-            Long branchId = existing.getBranch().getId();
-            if (!piecesByBranch.containsKey(branchId)) {
-                pipeline.applyAllocationDelta(model, existing.getBranch(),
-                        -existing.getQuantityAllocated(), cut.getCutDate());
+            Long sizeId = existing.getSize() == null ? null : existing.getSize().getId();
+            BranchSize key = new BranchSize(existing.getBranch().getId(), sizeId);
+            int quantity = wanted.getOrDefault(key, 0);
+            int previous = existing.getQuantityAllocated();
+
+            if (quantity == 0) {
+                // That branch no longer sews this size at all.
+                pipeline.applyAllocationDelta(model, existing.getBranch(), existing.getSize(),
+                        -previous, cut.getCutDate());
                 modelAllocations.delete(existing);
-            }
-        }
-
-        for (var entry : piecesByBranch.entrySet()) {
-            Branch branch = branchesById.get(entry.getKey());
-            int quantity = entry.getValue();
-
-            var existing = modelAllocations.findByCutIdAndModelIdAndBranchId(
-                    cut.getId(), model.getId(), branch.getId());
-            int previous = existing.map(CutModelAllocation::getQuantityAllocated).orElse(0);
-            if (previous == quantity) {
+                wanted.remove(key);
                 continue;
             }
 
-            CutModelAllocation allocation = existing.orElseGet(() -> {
-                CutModelAllocation created = new CutModelAllocation();
-                created.setCut(cut);
-                created.setModel(model);
-                created.setBranch(branch);
-                created.setQuantityAllocated(quantity);
-                return modelAllocations.save(created);
-            });
-            allocation.setQuantityAllocated(quantity);
+            wanted.remove(key);
+            if (previous == quantity) {
+                continue;
+            }
+            existing.setQuantityAllocated(quantity);
+            pipeline.applyAllocationDelta(model, existing.getBranch(), existing.getSize(),
+                    quantity - previous, cut.getCutDate());
+            audit.record(AuditService.MODEL_ALLOCATION_CHANGED, "CutModelAllocation", existing.getId(),
+                    existing.getBranch(), BigDecimal.valueOf(quantity),
+                    "Derived from the marker on cut %s".formatted(cut.getCutNumber()));
+        }
 
-            pipeline.applyAllocationDelta(model, branch, quantity - previous, cut.getCutDate());
+        // Whatever the marker calls for that has no row yet.
+        for (var entry : wanted.entrySet()) {
+            // A marker entered before any roll is on the cut yields no pieces yet.
+            // No row is written for it: an allocation is a quantity of pieces, and
+            // zero of them is not a plan, it is the absence of one.
+            if (entry.getValue() <= 0) {
+                continue;
+            }
+            Branch branch = branchesById.get(entry.getKey().branchId());
+            GarmentSize size = sizes.findById(entry.getKey().sizeId())
+                    .orElseThrow(() -> NotFoundException.of("Garment size", entry.getKey().sizeId()));
+            int quantity = entry.getValue();
+
+            CutModelAllocation allocation = new CutModelAllocation();
+            allocation.setCut(cut);
+            allocation.setModel(model);
+            allocation.setBranch(branch);
+            allocation.setSize(size);
+            allocation.setQuantityAllocated(quantity);
+            modelAllocations.save(allocation);
+
+            pipeline.applyAllocationDelta(model, branch, size, quantity, cut.getCutDate());
             audit.record(AuditService.MODEL_ALLOCATION_CHANGED, "CutModelAllocation", allocation.getId(),
                     branch, BigDecimal.valueOf(quantity),
                     "Derived from the marker on cut %s".formatted(cut.getCutNumber()));
         }
+    }
+
+    /**
+     * Makes a model created from a marker row the half of a suit it says it is.
+     *
+     * <p>The suit is named by number and created if it does not exist yet, the
+     * same way the half is: a suit first appears when somebody cuts one, and
+     * stopping to register it separately is the friction this avoids.
+     *
+     * <p>Nothing here assumes the two halves come from different cuts. One cut
+     * laying out a suit's top and bottom together is two marker rows naming the
+     * same suit with different roles, and that works because a cut's models were
+     * never a single thing to begin with.
+     */
+    private void linkToSuit(Model model, String suitModelNumber, ModelRole role) {
+        String suitNumber = suitModelNumber == null ? "" : suitModelNumber.trim();
+        if (suitNumber.isEmpty()) {
+            return;
+        }
+        if (role == null) {
+            throw new BusinessRuleException("suit_role_required",
+                    "Say which half of suit %s this is: top or bottom".formatted(suitNumber));
+        }
+        if (suitNumber.equalsIgnoreCase(model.getModelNumber())) {
+            throw new BusinessRuleException("suit_is_self",
+                    "A model cannot be half of itself");
+        }
+
+        Model suit = models.findByModelNumberIgnoreCase(suitNumber).orElseGet(() -> {
+            Model created = new Model();
+            created.setModelNumber(suitNumber);
+            created.setNameAr(suitNumber);
+            created.setActive(true);
+            return models.save(created);
+        });
+
+        if (suit.isSuitPart()) {
+            throw new BusinessRuleException("suit_is_already_a_part",
+                    "Model %s is itself half of a suit".formatted(suit.getModelNumber()));
+        }
+
+        // Already linked, and to something else: say so rather than quietly
+        // moving a model from one suit to another behind somebody's back.
+        if (model.getParentModel() != null
+                && !model.getParentModel().getId().equals(suit.getId())) {
+            throw new BusinessRuleException("model_already_in_suit",
+                    "Model %s is already half of suit %s"
+                            .formatted(model.getModelNumber(), model.getParentModel().getModelNumber()));
+        }
+
+        model.setParentModel(suit);
+        model.setRole(role);
+    }
+
+    /** One branch and one size: the grain an allocation is derived at. */
+    private record BranchSize(Long branchId, Long sizeId) {
     }
 
     /** Re-derives every model on the cut, e.g. after the layer count changes. */
@@ -645,6 +736,7 @@ public class CutService {
                     if (existing.getSewingBranch() == null && request.modelSewingBranchId() != null) {
                         existing.setSewingBranch(requireBranch(request.modelSewingBranchId()));
                     }
+                    linkToSuit(existing, request.suitModelNumber(), request.role());
                     return existing;
                 })
                 .orElseGet(() -> {

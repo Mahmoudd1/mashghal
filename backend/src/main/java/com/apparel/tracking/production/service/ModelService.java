@@ -230,6 +230,47 @@ public class ModelService {
         if (request.active() != null) {
             model.setActive(request.active());
         }
+        applySuit(model, request);
+    }
+
+    /**
+     * Links a model to the suit it is half of.
+     *
+     * <p>The database enforces the shape — role and suit set together, one top
+     * and one bottom per suit, nothing its own half. What is checked here is the
+     * part it cannot see cheaply: a suit is not itself half of something else.
+     * Two levels is a suit; three is a structure nobody asked for and the
+     * pairing arithmetic could not read.
+     */
+    private void applySuit(Model model, ModelRequest request) {
+        if (request.suitModelId() == null) {
+            model.setParentModel(null);
+            model.setRole(null);
+            return;
+        }
+        if (request.role() == null) {
+            throw new BusinessRuleException("suit_role_required",
+                    "Say which half of the suit this is: top or bottom");
+        }
+
+        Model suit = require(request.suitModelId());
+        if (suit.getId().equals(model.getId())) {
+            throw new BusinessRuleException("suit_is_self",
+                    "A model cannot be half of itself");
+        }
+        if (suit.isSuitPart()) {
+            throw new BusinessRuleException("suit_is_already_a_part",
+                    "Model %s is itself half of a suit, so it cannot hold halves of its own"
+                            .formatted(suit.getModelNumber()));
+        }
+        if (!models.findByParentModelIdOrderByRoleAsc(model.getId()).isEmpty()) {
+            throw new BusinessRuleException("suit_has_parts",
+                    "Model %s is a suit with halves of its own, so it cannot be half of another"
+                            .formatted(model.getModelNumber()));
+        }
+
+        model.setParentModel(suit);
+        model.setRole(request.role());
     }
 
     private Map<Long, List<BranchQuantityDto>> plansByModel(Long modelId) {

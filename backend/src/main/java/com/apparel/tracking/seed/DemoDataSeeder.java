@@ -278,7 +278,8 @@ public class DemoDataSeeder implements ApplicationRunner {
 
         for (ModelSpec spec : specs) {
             ids.put(spec.number(), models.create(new ModelRequest(
-                    spec.number(), spec.nameAr(), spec.nameEn(), null, spec.sewingBranch(), true)).id());
+                    spec.number(), spec.nameAr(), spec.nameEn(), null, spec.sewingBranch(),
+                    null, null, true)).id());
         }
         return ids;
     }
@@ -292,21 +293,21 @@ public class DemoDataSeeder implements ApplicationRunner {
         Map<String, Long> ids = new LinkedHashMap<>();
 
         ids.put("CUT-1", cuts.create(new CutRequest(
-                "CUT-1", CutType.MAIN, null, agamy, cottonType, "200", "قميص كلاسيك", agamy, today.minusDays(45),
+                "CUT-1", CutType.MAIN, null, agamy, cottonType, "200", "قميص كلاسيك", agamy, null, null, today.minusDays(45),
                 BigDecimal.valueOf(6.5), "قميص كلاسيك وتي شيرت", "تقطيعة القمصان", "Shirt run", null)).id());
         ids.put("CUT-2", cuts.create(new CutRequest(
-                "CUT-2", CutType.MAIN, null, smouha, denimType, "500", "بنطلون جينز", smouha, today.minusDays(30),
+                "CUT-2", CutType.MAIN, null, smouha, denimType, "500", "بنطلون جينز", smouha, null, null, today.minusDays(30),
                 BigDecimal.valueOf(7.25), "بنطلون جينز", "تقطيعة الجينز", "Denim run", null)).id());
         ids.put("CUT-3", cuts.create(new CutRequest(
-                "CUT-3", CutType.MAIN, null, agamy, linenType, "620", "جاكيت كتان", agamy, today.minusDays(12),
+                "CUT-3", CutType.MAIN, null, agamy, linenType, "620", "جاكيت كتان", agamy, null, null, today.minusDays(12),
                 BigDecimal.valueOf(5.0), "جاكيت كتان", "تقطيعة الكتان", "Linen run", null)).id());
 
         // Secondary and derby cuts hang off a main cut.
         ids.put("CUT-1S", cuts.create(new CutRequest(
-                "CUT-1S", CutType.SECONDARY, ids.get("CUT-1"), agamy, cottonType, "310", "تي شيرت قطن", agamy, today.minusDays(40),
+                "CUT-1S", CutType.SECONDARY, ids.get("CUT-1"), agamy, cottonType, "310", "تي شيرت قطن", agamy, null, null, today.minusDays(40),
                 BigDecimal.valueOf(2.0), "أكمام إضافية", "أكمام إضافية", "Extra sleeves", null)).id());
         ids.put("CUT-2D", cuts.create(new CutRequest(
-                "CUT-2D", CutType.DERBY, ids.get("CUT-2"), smouha, denimType, "500", "بنطلون جينز", smouha, today.minusDays(25),
+                "CUT-2D", CutType.DERBY, ids.get("CUT-2"), smouha, denimType, "500", "بنطلون جينز", smouha, null, null, today.minusDays(25),
                 BigDecimal.valueOf(3.5), "دربي الجينز", "دربي الجينز", "Denim derby", null)).id());
 
         return ids;
@@ -383,7 +384,7 @@ public class DemoDataSeeder implements ApplicationRunner {
         for (Marker marker : markers) {
             sizes.findByCodeIgnoreCase(marker.sizeCode()).ifPresent(size ->
                     cuts.setModelSize(cutIds.get(marker.cut()), new CutModelSizeRequest(
-                            modelIds.get(marker.model()), null, null,
+                            modelIds.get(marker.model()), null, null, null, null,
                             size.getId(), marker.perLayer(), marker.branch())));
         }
     }
@@ -399,41 +400,66 @@ public class DemoDataSeeder implements ApplicationRunner {
             ModelPipelineDto model = pipeline.pipelineForModel(modelId);
 
             for (BranchPipelineDto branch : model.branches()) {
-                int cutting = stagePieces(branch, PipelineService.STAGE_CUTTING);
-                if (cutting == 0) {
-                    continue;
-                }
-
                 // Leave one branch of one model entirely at cutting, so the
                 // dashboard shows that state too.
                 if (branch.branchId().equals(smouha) && model.modelNumber().equals("620")) {
                     continue;
                 }
 
-                int toSewing = (int) Math.round(cutting * 0.75);
-                if (toSewing == 0) {
-                    continue;
-                }
-                move(modelId, branch.branchId(), PipelineService.STAGE_CUTTING,
-                        "SEWING", toSewing, today.minusDays(20));
+                List<StageCountDto.SizeCountDto> atCutting = branch.stages().stream()
+                        .filter(stage -> stage.stageCode().equals(PipelineService.STAGE_CUTTING))
+                        .findFirst()
+                        .map(StageCountDto::sizes)
+                        .orElse(List.of());
 
-                int toReceive = (int) Math.round(toSewing * 0.6);
-                if (toReceive == 0) {
-                    continue;
-                }
-                pipeline.receive(new ReceiveRequest(
-                        modelId, branch.branchId(), toReceive, today.minusDays(9), null));
+                // Size by size, and deliberately at different rates: the first
+                // size runs ahead to the shop while the last one is still on the
+                // cutting table, which is how a real cut comes off it.
+                int index = 0;
+                for (StageCountDto.SizeCountDto size : atCutting) {
+                    int cutting = size.pieceCount();
+                    if (cutting == 0) {
+                        index++;
+                        continue;
+                    }
 
-                // Defects are found at receiving inspection.
-                int flagged = Math.max(1, (int) Math.round(toReceive * 0.05));
-                pipeline.flag(new FlagRequest(
-                        modelId, branch.branchId(), null, flagged, "عيب في الخياطة", today.minusDays(8)));
+                    // The last size of each branch stays where it is.
+                    boolean holdBack = index == atCutting.size() - 1 && atCutting.size() > 1;
+                    if (holdBack) {
+                        index++;
+                        continue;
+                    }
 
-                int sellable = toReceive - flagged;
-                int toSell = (int) Math.round(sellable * 0.6);
-                if (toSell > 0) {
-                    pipeline.sell(new SellRequest(
-                            modelId, branch.branchId(), toSell, today.minusDays(3), null));
+                    int toSewing = (int) Math.round(cutting * 0.75);
+                    if (toSewing == 0) {
+                        index++;
+                        continue;
+                    }
+                    move(modelId, branch.branchId(), PipelineService.STAGE_CUTTING, "SEWING",
+                            toSewing, size.sizeId(), today.minusDays(20));
+
+                    int toReceive = (int) Math.round(toSewing * 0.6);
+                    if (toReceive == 0) {
+                        index++;
+                        continue;
+                    }
+                    pipeline.receive(new ReceiveRequest(
+                            modelId, branch.branchId(), toReceive, size.sizeId(), today.minusDays(9), null));
+
+                    // Defects are found at receiving inspection.
+                    int flagged = Math.max(1, (int) Math.round(toReceive * 0.05));
+                    pipeline.flag(new FlagRequest(
+                            modelId, branch.branchId(), null, flagged, "عيب في الخياطة",
+                            size.sizeId(), today.minusDays(8)));
+
+                    int sellable = toReceive - flagged;
+                    int toSell = (int) Math.round(sellable * 0.6);
+                    if (toSell > 0) {
+                        pipeline.sell(new SellRequest(
+                                modelId, branch.branchId(), toSell, size.sizeId(),
+                                today.minusDays(3), null));
+                    }
+                    index++;
                 }
             }
         }
@@ -447,8 +473,9 @@ public class DemoDataSeeder implements ApplicationRunner {
                 .orElse(0);
     }
 
-    private void move(Long modelId, Long branchId, String from, String to, int quantity, LocalDate date) {
-        pipeline.move(new StageMoveRequest(modelId, branchId, from, to, quantity, date, null));
+    private void move(
+            Long modelId, Long branchId, String from, String to, int quantity, Long sizeId, LocalDate date) {
+        pipeline.move(new StageMoveRequest(modelId, branchId, from, to, quantity, sizeId, date, null));
     }
 
     private Long branchId(String code) {

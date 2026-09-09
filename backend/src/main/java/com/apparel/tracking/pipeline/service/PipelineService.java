@@ -33,13 +33,19 @@ import com.apparel.tracking.reference.domain.Branch;
 import com.apparel.tracking.reference.domain.PipelineStage;
 import com.apparel.tracking.reference.repository.BranchRepository;
 import com.apparel.tracking.reference.repository.PipelineStageRepository;
+import com.apparel.tracking.size.domain.GarmentSize;
+import com.apparel.tracking.size.repository.GarmentSizeRepository;
 
 import org.springframework.stereotype.Service;
 import org.springframework.transaction.annotation.Transactional;
 
 /**
- * Piece counts per model, per branch, per stage — and the only code allowed to
- * change them.
+ * Piece counts per model, per branch, per stage, per size — and the only code
+ * allowed to change them.
+ *
+ * <p>Sizes move at their own pace: size 6 can be sewn and received while 8 and
+ * 10 are still on the cutting table. Each size is therefore its own row and its
+ * own running count, and a move names the size it moves.
  *
  * <p>The invariant, for every model and branch:
  * <pre>sum(stage piece counts) == sum(allocated pieces from every cut)</pre>
@@ -64,6 +70,7 @@ public class PipelineService {
     private final BranchRepository branches;
     private final PipelineStageRepository stages;
     private final CutModelAllocationRepository allocations;
+    private final GarmentSizeRepository garmentSizes;
 
     public PipelineService(
             ModelBranchStageCountRepository counts,
@@ -72,7 +79,9 @@ public class PipelineService {
             ModelRepository models,
             BranchRepository branches,
             PipelineStageRepository stages,
-            CutModelAllocationRepository allocations) {
+            CutModelAllocationRepository allocations,
+            GarmentSizeRepository garmentSizes) {
+        this.garmentSizes = garmentSizes;
         this.counts = counts;
         this.movements = movements;
         this.flagEvents = flagEvents;
@@ -92,17 +101,19 @@ public class PipelineService {
      * rather than silently unwinding progress somebody recorded further down the
      * line.
      */
-    public void applyAllocationDelta(Model model, Branch branch, int delta, LocalDate cutDate) {
+    public void applyAllocationDelta(
+            Model model, Branch branch, GarmentSize size, int delta, LocalDate cutDate) {
         if (delta == 0) {
             return;
         }
         PipelineStage cutting = requireStage(STAGE_CUTTING);
-        ModelBranchStageCount cuttingCount = countFor(model, branch, cutting);
+        ModelBranchStageCount cuttingCount = countFor(model, branch, cutting, size);
 
         if (delta > 0) {
             // Dated to the cut: these pieces physically entered cutting that day.
             cuttingCount.add(delta);
-            logMovement(model, branch, null, cutting, delta, cutDate, MovementReason.ALLOCATION_ADDED, null);
+            logMovement(model, branch, size, null, cutting, delta, cutDate,
+                    MovementReason.ALLOCATION_ADDED, null);
             return;
         }
 
@@ -117,7 +128,8 @@ public class PipelineService {
         // Dated to today: a reduction is a correction being made now, not something
         // that happened back on the cutting date.
         cuttingCount.remove(reduction);
-        logMovement(model, branch, cutting, null, reduction, LocalDate.now(), MovementReason.ALLOCATION_REDUCED, null);
+        logMovement(model, branch, size, cutting, null, reduction, LocalDate.now(),
+                MovementReason.ALLOCATION_REDUCED, null);
     }
 
     // --- actions -------------------------------------------------------------
@@ -132,12 +144,13 @@ public class PipelineService {
     public ModelPipelineDto receive(ReceiveRequest request) {
         Model model = requireModel(request.modelId());
         Branch branch = requireBranch(request.branchId());
+        GarmentSize size = resolveSize(request.garmentSizeId());
         PipelineStage received = requireStage(STAGE_RECEIVED);
 
-        drawFromEarlierStages(model, branch, received, request.quantity(), request.receivedDate(),
+        drawFromEarlierStages(model, branch, size, received, request.quantity(), request.receivedDate(),
                 MovementReason.RECEIVING, request.note());
 
-        countFor(model, branch, received).add(request.quantity());
+        countFor(model, branch, received, size).add(request.quantity());
         return pipelineForModel(model.getId());
     }
 
@@ -148,7 +161,8 @@ public class PipelineService {
         PipelineStage received = requireStage(STAGE_RECEIVED);
         PipelineStage sold = requireStage(STAGE_SOLD);
 
-        ModelBranchStageCount receivedCount = countFor(model, branch, received);
+        GarmentSize size = resolveSize(request.garmentSizeId());
+        ModelBranchStageCount receivedCount = countFor(model, branch, received, size);
         if (request.quantity() > receivedCount.sellableCount()) {
             throw new BusinessRuleException("not_enough_sellable_pieces",
                     ("Received holds %d pieces of which %d are flagged as non-sellable, "
@@ -158,8 +172,8 @@ public class PipelineService {
         }
 
         receivedCount.remove(request.quantity());
-        countFor(model, branch, sold).add(request.quantity());
-        logMovement(model, branch, received, sold, request.quantity(), request.soldDate(),
+        countFor(model, branch, sold, size).add(request.quantity());
+        logMovement(model, branch, size, received, sold, request.quantity(), request.soldDate(),
                 MovementReason.SALE, request.note());
 
         return pipelineForModel(model.getId());
@@ -177,9 +191,10 @@ public class PipelineService {
                     "The source and destination stages are the same");
         }
 
-        countFor(model, branch, from).remove(request.quantity());
-        countFor(model, branch, to).add(request.quantity());
-        logMovement(model, branch, from, to, request.quantity(), request.movementDate(),
+        GarmentSize size = resolveSize(request.garmentSizeId());
+        countFor(model, branch, from, size).remove(request.quantity());
+        countFor(model, branch, to, size).add(request.quantity());
+        logMovement(model, branch, size, from, to, request.quantity(), request.movementDate(),
                 MovementReason.STAGE_MOVE, request.note());
 
         return pipelineForModel(model.getId());
@@ -210,7 +225,8 @@ public class PipelineService {
                             .formatted(received.getCode(), stage.getCode()));
         }
 
-        ModelBranchStageCount count = countFor(model, branch, stage);
+        GarmentSize size = resolveSize(request.garmentSizeId());
+        ModelBranchStageCount count = countFor(model, branch, stage, size);
         if (action == FlagAction.FLAG) {
             count.flag(request.quantity());
         } else {
@@ -221,6 +237,7 @@ public class PipelineService {
         event.setModel(model);
         event.setBranch(branch);
         event.setStage(stage);
+        event.setSize(size);
         event.setAction(action);
         event.setQuantity(request.quantity());
         event.setReason(request.reason());
@@ -353,17 +370,14 @@ public class PipelineService {
 
     /** Zero-fills every active stage against the rows a branch actually has. */
     private List<StageCountDto> stageRows(List<ModelBranchStageCount> rows, List<PipelineStage> activeStages) {
-        Map<Long, ModelBranchStageCount> byStage = rows.stream()
-                .collect(Collectors.toMap(row -> row.getStage().getId(), row -> row));
+        // A stage holds one row per size, so these group rather than map.
+        Map<Long, List<ModelBranchStageCount>> byStage = rows.stream()
+                .collect(Collectors.groupingBy(row -> row.getStage().getId()));
 
         return activeStages.stream()
-                .map(stage -> {
-                    ModelBranchStageCount row = byStage.get(stage.getId());
-                    return row != null
-                            ? StageCountDto.from(row)
-                            : new StageCountDto(stage.getId(), stage.getCode(), stage.getNameAr(),
-                                    stage.getNameEn(), stage.getSequenceNo(), 0, 0);
-                })
+                .map(stage -> StageCountDto.of(
+                        stage.getId(), stage.getCode(), stage.getNameAr(), stage.getNameEn(),
+                        stage.getSequenceNo(), byStage.getOrDefault(stage.getId(), List.of())))
                 .toList();
     }
 
@@ -381,17 +395,14 @@ public class PipelineService {
 
     /** Every active stage appears, zero-filled, so the UI renders a complete row. */
     private List<StageCountDto> allStagesFor(Branch branch, List<ModelBranchStageCount> rows) {
-        Map<Long, ModelBranchStageCount> byStage = rows.stream()
-                .collect(Collectors.toMap(row -> row.getStage().getId(), row -> row));
+        // Grouped, not mapped one-to-one: a stage now holds a row per size.
+        Map<Long, List<ModelBranchStageCount>> byStage = rows.stream()
+                .collect(Collectors.groupingBy(row -> row.getStage().getId()));
 
         return stages.findAllByActiveTrueOrderBySequenceNoAsc().stream()
-                .map(stage -> {
-                    ModelBranchStageCount row = byStage.get(stage.getId());
-                    return row != null
-                            ? StageCountDto.from(row)
-                            : new StageCountDto(stage.getId(), stage.getCode(), stage.getNameAr(), stage.getNameEn(),
-                                    stage.getSequenceNo(), 0, 0);
-                })
+                .map(stage -> StageCountDto.of(
+                        stage.getId(), stage.getCode(), stage.getNameAr(), stage.getNameEn(),
+                        stage.getSequenceNo(), byStage.getOrDefault(stage.getId(), List.of())))
                 .toList();
     }
 
@@ -409,14 +420,20 @@ public class PipelineService {
     private void drawFromEarlierStages(
             Model model,
             Branch branch,
+            GarmentSize size,
             PipelineStage target,
             int quantity,
             LocalDate date,
             MovementReason reason,
             String note) {
+        Long sizeId = size == null ? null : size.getId();
         List<ModelBranchStageCount> earlier = counts.findByModelAndBranch(model.getId(), branch.getId()).stream()
                 .filter(row -> row.getStage().getSequenceNo() < target.getSequenceNo())
                 .filter(row -> row.getPieceCount() > 0)
+                // Only this size's pieces: receiving 20 of size 6 must not quietly
+                // take size 8 off the cutting table to make up the number.
+                .filter(row -> java.util.Objects.equals(
+                        row.getSize() == null ? null : row.getSize().getId(), sizeId))
                 .sorted(Comparator.comparingInt((ModelBranchStageCount row) -> row.getStage().getSequenceNo())
                         .reversed())
                 .toList();
@@ -424,9 +441,10 @@ public class PipelineService {
         int available = earlier.stream().mapToInt(ModelBranchStageCount::getPieceCount).sum();
         if (available < quantity) {
             throw new BusinessRuleException("not_enough_pieces_in_progress",
-                    "Only %d pieces of model %s are in progress at %s, cannot move %d to %s"
-                            .formatted(available, model.getModelNumber(), branch.getCode(), quantity,
-                                    target.getCode()));
+                    "Only %d pieces of model %s%s are in progress at %s, cannot move %d to %s"
+                            .formatted(available, model.getModelNumber(),
+                                    size == null ? "" : " size " + size.getCode(),
+                                    branch.getCode(), quantity, target.getCode()));
         }
 
         int remaining = quantity;
@@ -436,26 +454,39 @@ public class PipelineService {
             }
             int taken = Math.min(remaining, row.getPieceCount());
             row.remove(taken);
-            logMovement(model, branch, row.getStage(), target, taken, date, reason, note);
+            logMovement(model, branch, size, row.getStage(), target, taken, date, reason, note);
             remaining -= taken;
         }
     }
 
     /** Fetches the count row, creating a zeroed one the first time it is needed. */
-    private ModelBranchStageCount countFor(Model model, Branch branch, PipelineStage stage) {
-        return counts.findByModelIdAndBranchIdAndStageId(model.getId(), branch.getId(), stage.getId())
+    private ModelBranchStageCount countFor(
+            Model model, Branch branch, PipelineStage stage, GarmentSize size) {
+        return counts.findOne(model.getId(), branch.getId(), stage.getId(),
+                        size == null ? null : size.getId())
                 .orElseGet(() -> {
                     ModelBranchStageCount created = new ModelBranchStageCount();
                     created.setModel(model);
                     created.setBranch(branch);
                     created.setStage(stage);
+                    created.setSize(size);
                     return counts.save(created);
                 });
+    }
+
+    /** The size a request names, or null for the pieces recorded without one. */
+    private GarmentSize resolveSize(Long garmentSizeId) {
+        if (garmentSizeId == null) {
+            return null;
+        }
+        return garmentSizes.findById(garmentSizeId)
+                .orElseThrow(() -> NotFoundException.of("Garment size", garmentSizeId));
     }
 
     private void logMovement(
             Model model,
             Branch branch,
+            GarmentSize size,
             PipelineStage from,
             PipelineStage to,
             int quantity,
@@ -465,6 +496,7 @@ public class PipelineService {
         StageMovement movement = new StageMovement();
         movement.setModel(model);
         movement.setBranch(branch);
+        movement.setSize(size);
         movement.setFromStage(from);
         movement.setToStage(to);
         movement.setQuantity(quantity);

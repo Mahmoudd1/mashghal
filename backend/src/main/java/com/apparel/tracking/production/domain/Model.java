@@ -5,6 +5,8 @@ import com.apparel.tracking.reference.domain.Branch;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
+import jakarta.persistence.EnumType;
+import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
@@ -42,6 +44,26 @@ public class Model extends BaseEntity {
 
     @Column(name = "active", nullable = false)
     private boolean active = true;
+
+    /**
+     * The suit this model is half of, or null for an ordinary model.
+     *
+     * <p>Set on the two sub-models, never on the suit: model 200 owns "200 top"
+     * and "200 bottom", and neither of those owns anything in turn.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "parent_model_id")
+    private Model parentModel;
+
+    /** Which half of the suit this is. Set exactly when {@link #parentModel} is. */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "model_role", length = 16)
+    private ModelRole role;
+
+    /** True for "200 top" and "200 bottom", false for 200 itself. */
+    public boolean isSuitPart() {
+        return parentModel != null;
+    }
 
     /**
      * Where this model is sewn by default. Individual sizes inherit it, and only

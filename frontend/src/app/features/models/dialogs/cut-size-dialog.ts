@@ -10,6 +10,7 @@ import { MatInputModule } from '@angular/material/input';
 import { MatSelectModule } from '@angular/material/select';
 import { TranslatePipe } from '@ngx-translate/core';
 
+import { LocalizedNamePipe } from '../../../core/i18n/localized-name.pipe';
 import { Cut, CutModelSize } from '../../../core/models/api.models';
 import { ReferenceService } from '../../../core/models/reference.service';
 import { filterByName, findExact } from '../../../shared/lookup-autocomplete/lookup-filter';
@@ -42,6 +43,7 @@ export interface CutSizeDialogData {
     MatInputModule,
     MatSelectModule,
     TranslatePipe,
+    LocalizedNamePipe,
     NumericFieldDirective,
   ],
   template: `
@@ -52,16 +54,42 @@ export interface CutSizeDialogData {
       </p>
 
       <form [formGroup]="form" class="dialog-form">
+        <!-- Typed, not picked: one cut can feed a second model that does not
+             exist yet, and stopping to go and register it first is the reason
+             a cut gets entered with one model and corrected later. -->
         <mat-form-field appearance="outline">
-          <mat-label>{{ 'model.label' | translate }}</mat-label>
-          <mat-select formControlName="modelId">
-            @for (model of production.models.value(); track model.id) {
-              <mat-option [value]="model.id"
-                >{{ model.modelNumber }} — {{ model.nameAr }}</mat-option
-              >
+          <mat-label>{{ 'model.number' | translate }}</mat-label>
+          <input
+            matInput
+            formControlName="modelNumber"
+            [matAutocomplete]="modelAuto"
+            autocomplete="off"
+            dir="ltr"
+          />
+          <mat-autocomplete #modelAuto="matAutocomplete">
+            @for (model of modelSuggestions(); track model.id) {
+              <mat-option [value]="model.modelNumber">
+                {{ model.modelNumber }}
+                <span class="option-hint">{{ model.nameAr }}</span>
+              </mat-option>
             }
-          </mat-select>
+          </mat-autocomplete>
+          @if (matchedModel()) {
+            <mat-hint>{{ 'cut.modelExistsHint' | translate }}</mat-hint>
+          }
         </mat-form-field>
+
+        @if (creatingModel()) {
+          <p class="creating-hint">
+            <mat-icon inline>add_circle</mat-icon>
+            {{ 'cut.modelCreatedHint' | translate }}
+          </p>
+
+          <mat-form-field appearance="outline">
+            <mat-label>{{ 'model.nameAr' | translate }}</mat-label>
+            <input matInput formControlName="modelNameAr" />
+          </mat-form-field>
+        }
 
         <mat-form-field appearance="outline">
           <mat-label>{{ 'size.label' | translate }}</mat-label>
@@ -85,6 +113,23 @@ export interface CutSizeDialogData {
             dir="ltr"
           />
           <mat-hint>{{ 'cut.derivedHint' | translate }}</mat-hint>
+        </mat-form-field>
+
+        <!-- Only for a model whose sizes are split across branches; left alone,
+             the size is sewn wherever the model is. -->
+        <mat-form-field appearance="outline">
+          <mat-label>{{ 'cut.sizeBranch' | translate }}</mat-label>
+          <mat-select formControlName="branchId">
+            <mat-option [value]="null">
+              {{ 'cut.inheritsBranch' | translate }}
+              @if (inheritedBranchName(); as inherited) {
+                — {{ inherited }}
+              }
+            </mat-option>
+            @for (branch of reference.branches.value(); track branch.id) {
+              <mat-option [value]="branch.id">{{ branch | localizedName }}</mat-option>
+            }
+          </mat-select>
         </mat-form-field>
       </form>
     </mat-dialog-content>
@@ -142,7 +187,7 @@ export class CutSizeDialog {
     filterByName(this.production.models.value(), this.typedModel(), (model) => model.modelNumber),
   );
 
-  private readonly matchedModel = computed(() =>
+  protected readonly matchedModel = computed(() =>
     findExact(this.production.models.value(), this.typedModel(), (model) => model.modelNumber),
   );
 

@@ -15,6 +15,12 @@ public record StageMoveRequest(
         @NotBlank String fromStageCode,
         @NotBlank String toStageCode,
         @NotNull @Min(1) Integer quantity,
+        /**
+         * Which size these pieces are. Optional: omitted, the action applies to
+         * the pieces recorded without a size, which is what a model that was
+         * never entered size by size has.
+         */
+        Long garmentSizeId,
         @NotNull @PastOrPresent LocalDate movementDate,
         @Size(max = 512) String note) {
 }

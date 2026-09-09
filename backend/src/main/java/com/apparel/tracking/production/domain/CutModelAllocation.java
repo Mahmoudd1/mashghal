@@ -2,6 +2,7 @@ package com.apparel.tracking.production.domain;
 
 import com.apparel.tracking.common.model.BaseEntity;
 import com.apparel.tracking.reference.domain.Branch;
+import com.apparel.tracking.size.domain.GarmentSize;
 
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
@@ -39,6 +40,14 @@ public class CutModelAllocation extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "branch_id", nullable = false)
     private Branch branch;
+
+    /**
+     * Which size these pieces are, when the marker says. Null on an allocation
+     * entered by hand for a cut with no marker behind it.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "garment_size_id")
+    private GarmentSize size;
 
     @Column(name = "quantity_allocated", nullable = false)
     private int quantityAllocated;

@@ -1,5 +1,7 @@
 package com.apparel.tracking.production.dto;
 
+import com.apparel.tracking.production.domain.ModelRole;
+
 import java.math.BigDecimal;
 import java.time.LocalDate;
 
@@ -27,6 +29,10 @@ public record CutRequest(
         @Size(max = 64) String modelNumber,
         @Size(max = 128) String modelNameAr,
         Long modelSewingBranchId,
+        // The suit this cut's model is half of, and which half. A suit number
+        // that does not exist yet is created, like the model itself.
+        @Size(max = 64) String suitModelNumber,
+        ModelRole role,
         @NotNull @PastOrPresent LocalDate cutDate,
         @DecimalMin("0.001") @Digits(integer = 9, fraction = 3) BigDecimal cutLength,
         @Size(max = 512) String modelDescription,

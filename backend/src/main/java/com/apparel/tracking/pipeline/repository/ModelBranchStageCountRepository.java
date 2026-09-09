@@ -15,6 +15,26 @@ public interface ModelBranchStageCountRepository extends JpaRepository<ModelBran
 
     Optional<ModelBranchStageCount> findByModelIdAndBranchIdAndStageId(Long modelId, Long branchId, Long stageId);
 
+    /**
+     * One stage row for one size.
+     *
+     * <p>Written out rather than derived from the method name because a null size
+     * is a real bucket — the pieces recorded before sizes were tracked — and a
+     * derived query would compare it with {@code = null} and never match it.
+     */
+    @Query("""
+            select c from ModelBranchStageCount c
+            where c.model.id = :modelId
+              and c.branch.id = :branchId
+              and c.stage.id = :stageId
+              and ((:sizeId is null and c.size is null) or c.size.id = :sizeId)
+            """)
+    Optional<ModelBranchStageCount> findOne(
+            @Param("modelId") Long modelId,
+            @Param("branchId") Long branchId,
+            @Param("stageId") Long stageId,
+            @Param("sizeId") Long sizeId);
+
     @Query("""
             select c from ModelBranchStageCount c
               join fetch c.stage

@@ -4,6 +4,7 @@ import com.apparel.tracking.common.exception.BusinessRuleException;
 import com.apparel.tracking.common.model.BaseEntity;
 import com.apparel.tracking.production.domain.Model;
 import com.apparel.tracking.reference.domain.Branch;
+import com.apparel.tracking.size.domain.GarmentSize;
 import com.apparel.tracking.reference.domain.PipelineStage;
 
 import jakarta.persistence.Column;
@@ -42,6 +43,18 @@ public class ModelBranchStageCount extends BaseEntity {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "stage_id", nullable = false)
     private PipelineStage stage;
+
+    /**
+     * Which size these pieces are.
+     *
+     * <p>Null means the count predates size tracking, not that the pieces have
+     * no size. Sizes advance through the stages independently — size 6 can be
+     * sewn while 8 and 10 are still being cut — which is the whole reason this
+     * column exists.
+     */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "garment_size_id")
+    private GarmentSize size;
 
     @Column(name = "piece_count", nullable = false)
     private int pieceCount;

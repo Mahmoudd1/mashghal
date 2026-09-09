@@ -5,6 +5,7 @@ import java.time.LocalDate;
 
 import com.apparel.tracking.production.domain.Model;
 import com.apparel.tracking.reference.domain.Branch;
+import com.apparel.tracking.size.domain.GarmentSize;
 import com.apparel.tracking.reference.domain.PipelineStage;
 
 import jakarta.persistence.Column;
@@ -47,6 +48,11 @@ public class StageMovement {
     @ManyToOne(fetch = FetchType.LAZY, optional = false)
     @JoinColumn(name = "branch_id", nullable = false)
     private Branch branch;
+
+    /** The size these pieces are; null on anything recorded before sizes. */
+    @ManyToOne(fetch = FetchType.LAZY)
+    @JoinColumn(name = "garment_size_id")
+    private GarmentSize size;
 
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "from_stage_id")

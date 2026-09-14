@@ -19,6 +19,8 @@ import {
   Page,
   ProductionModel,
   emptyPage,
+  CutFabricDraw,
+  CutSummaryPreviewRequest,
 } from '../../core/models/api.models';
 
 export interface CutFilters {
@@ -130,6 +132,16 @@ export class ProductionService {
     return this.http
       .delete<void>(`${this.baseUrl}/models/${id}`)
       .pipe(tap(() => this.models.reload()));
+  }
+
+  /**
+   * Which batches a summary cut would draw on, without saving anything.
+   *
+   * <p>Worked out on the server because it depends on what every batch holds
+   * right now — stock the form has no way of knowing.
+   */
+  previewCutDraw(request: CutSummaryPreviewRequest): Observable<CutFabricDraw[]> {
+    return this.http.post<CutFabricDraw[]>(`${this.baseUrl}/cuts/summary-preview`, request);
   }
 
   createCut(request: CutRequest): Observable<Cut> {

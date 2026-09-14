@@ -6,13 +6,17 @@ import java.time.LocalDate;
 import java.util.List;
 
 import com.apparel.tracking.production.domain.Cut;
+import com.apparel.tracking.production.domain.CutEntryMode;
 import com.apparel.tracking.production.domain.CutStatus;
 import com.apparel.tracking.production.domain.CutType;
 
 /**
- * @param totalLayers      layers summed across every roll on this cut
- * @param defectPercentage waste as a share of the fabric consumed, to two places
+ * @param totalLayers      layers laid out: summed from the rolls, or stated outright
+ *                         on a cut written up from its totals
+ * @param defectPercentage spoilage as a share of the fabric consumed, to two places
+ * @param totalWasteWeight the عجز — fabric binned rather than cut, however recorded
  * @param weightPerPiece   fabric consumed per piece produced — the costing figure
+ * @param fabricDraws      which batches a summary cut drew on; empty for a detailed one
  */
 public record CutDto(
         Long id,
@@ -40,18 +44,25 @@ public record CutDto(
         BigDecimal totalWeightConsumed,
         BigDecimal totalDefectWeight,
         BigDecimal defectPercentage,
+        BigDecimal totalWasteWeight,
+        CutEntryMode entryMode,
+        Integer totalRolls,
+        Integer reusedRolls,
         long derivedPieces,
         long totalAllocatedPieces,
         BigDecimal weightPerPiece,
         List<CutModelDerivedDto> modelTotals,
         List<CutModelAllocationDto> modelAllocations,
         List<CutModelSizeDto> sizeBreakdown,
-        List<CutRollDto> rolls) {
+        List<CutRollDto> rolls,
+        List<CutFabricDrawDto> fabricDraws) {
 
     /** Header only — for list views, where the detail lists would be extra queries. */
     public static CutDto summary(
-            Cut cut, int totalLayers, BigDecimal consumed, BigDecimal defect, long allocated) {
-        return build(cut, totalLayers, consumed, defect, 0L, allocated, List.of(), List.of(), List.of(), List.of());
+            Cut cut, int totalLayers, BigDecimal consumed, BigDecimal defect,
+            BigDecimal waste, long allocated) {
+        return build(cut, totalLayers, consumed, defect, waste, 0L, allocated,
+                List.of(), List.of(), List.of(), List.of(), List.of());
     }
 
     public static CutDto detail(
@@ -59,14 +70,16 @@ public record CutDto(
             int totalLayers,
             BigDecimal consumed,
             BigDecimal defect,
+            BigDecimal waste,
             List<CutModelDerivedDto> modelTotals,
             List<CutModelAllocationDto> modelAllocations,
             List<CutModelSizeDto> sizeBreakdown,
-            List<CutRollDto> rolls) {
+            List<CutRollDto> rolls,
+            List<CutFabricDrawDto> fabricDraws) {
         long derived = modelTotals.stream().mapToLong(CutModelDerivedDto::derivedPieces).sum();
         long allocated = modelAllocations.stream().mapToLong(CutModelAllocationDto::quantityAllocated).sum();
-        return build(cut, totalLayers, consumed, defect, derived, allocated,
-                modelTotals, modelAllocations, sizeBreakdown, rolls);
+        return build(cut, totalLayers, consumed, defect, waste, derived, allocated,
+                modelTotals, modelAllocations, sizeBreakdown, rolls, fabricDraws);
     }
 
     private static CutDto build(
@@ -74,12 +87,14 @@ public record CutDto(
             int totalLayers,
             BigDecimal consumed,
             BigDecimal defect,
+            BigDecimal waste,
             long derivedPieces,
             long allocatedPieces,
             List<CutModelDerivedDto> modelTotals,
             List<CutModelAllocationDto> modelAllocations,
             List<CutModelSizeDto> sizeBreakdown,
-            List<CutRollDto> rolls) {
+            List<CutRollDto> rolls,
+            List<CutFabricDrawDto> fabricDraws) {
 
         BigDecimal consumedWeight = consumed == null ? BigDecimal.ZERO : consumed;
         BigDecimal defectWeight = defect == null ? BigDecimal.ZERO : defect;
@@ -122,12 +137,17 @@ public record CutDto(
                 consumedWeight,
                 defectWeight,
                 defectPercentage,
+                waste == null ? BigDecimal.ZERO : waste,
+                cut.getEntryMode(),
+                cut.getTotalRolls(),
+                cut.getReusedRolls(),
                 derivedPieces,
                 allocatedPieces,
                 weightPerPiece,
                 modelTotals,
                 modelAllocations,
                 sizeBreakdown,
-                rolls);
+                rolls,
+                fabricDraws);
     }
 }

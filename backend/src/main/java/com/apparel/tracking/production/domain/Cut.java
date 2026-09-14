@@ -100,6 +100,54 @@ public class Cut extends BaseEntity {
     @Column(name = "note", length = 512)
     private String note;
 
+    /**
+     * Whether this cut's fabric is recorded roll by roll or as totals.
+     *
+     * <p>Fixed once the cut carries data, because the two ways describe the same
+     * fabric and adding them together would double it.
+     */
+    @Enumerated(EnumType.STRING)
+    @Column(name = "entry_mode", nullable = false, length = 16)
+    private CutEntryMode entryMode = CutEntryMode.DETAILED;
+
+    /** Rolls laid out, including any that were already part-used. */
+    @Column(name = "total_rolls")
+    private Integer totalRolls;
+
+    /**
+     * How many of {@link #totalRolls} were already open before this cut.
+     *
+     * <p>Those were drawn off their batches by an earlier cut, so only the
+     * remainder counts against a batch's roll count here.
+     */
+    @Column(name = "reused_rolls")
+    private Integer reusedRolls;
+
+    /** Fabric taken off the shelf, waste included. */
+    @Column(name = "total_weight", precision = 14, scale = 3)
+    private BigDecimal totalWeight;
+
+    /** The عجز: the part of {@link #totalWeight} that was binned, not cut. */
+    @Column(name = "waste_weight", precision = 14, scale = 3)
+    private BigDecimal wasteWeight;
+
+    @Column(name = "total_layers")
+    private Integer totalLayers;
+
+    public boolean isSummary() {
+        return entryMode == CutEntryMode.SUMMARY;
+    }
+
+    /** Rolls this cut took off a batch: the ones that were not already open. */
+    public int newRolls() {
+        return totalRolls == null ? 0 : totalRolls - (reusedRolls == null ? 0 : reusedRolls);
+    }
+
+    /** Fabric that became garments — what was taken, less what was binned. */
+    public BigDecimal consumedWeight() {
+        return totalWeight == null ? BigDecimal.ZERO : totalWeight.subtract(wasteWeight);
+    }
+
     public boolean isOpen() {
         return status == CutStatus.OPEN;
     }

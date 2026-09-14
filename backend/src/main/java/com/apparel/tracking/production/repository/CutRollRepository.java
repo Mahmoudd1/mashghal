@@ -46,9 +46,10 @@ public interface CutRollRepository extends JpaRepository<CutRoll, Long> {
     @Query("select cr.cut.id, sum(cr.layers) from CutRoll cr group by cr.cut.id")
     List<Object[]> layersByCut();
 
-    /** Layers, weight and waste totals for a page of cuts: [cutId, layers, consumed, defect]. */
+    /** Totals for a page of cuts: [cutId, layers, consumed, defect, binned]. */
     @Query("""
-            select cr.cut.id, sum(cr.layers), sum(cr.weightConsumed), sum(cr.defectWeight)
+            select cr.cut.id, sum(cr.layers), sum(cr.weightConsumed),
+                   sum(cr.defectWeight), sum(cr.wasteWeight)
             from CutRoll cr
             where cr.cut.id in :cutIds
             group by cr.cut.id

@@ -271,6 +271,34 @@ public class FabricIntake extends BaseEntity {
         consumedRolls++;
     }
 
+    /**
+     * Marks several rolls gone at once.
+     *
+     * <p>A summary cut knows only how many rolls it took, never which, so it
+     * moves the count in one step rather than pretending to close them one by
+     * one.
+     */
+    public void consumeRolls(int count) {
+        if (count < 0) {
+            throw new BusinessRuleException("intake_roll_count_negative",
+                    "Roll count must not be negative");
+        }
+        if (consumedRolls + count > totalRolls) {
+            throw new BusinessRuleException("intake_insufficient_rolls",
+                    "The %s batch has %d rolls left, cannot take %d"
+                            .formatted(intakeDate, remainingRolls(), count));
+        }
+        consumedRolls += count;
+    }
+
+    public void releaseRolls(int count) {
+        if (count > consumedRolls) {
+            throw new BusinessRuleException("intake_release_exceeds_consumed",
+                    "Releasing more rolls than the %s batch has given out".formatted(intakeDate));
+        }
+        consumedRolls -= count;
+    }
+
     public void releaseRoll() {
         if (consumedRolls <= 0) {
             throw new BusinessRuleException("intake_release_exceeds_consumed",

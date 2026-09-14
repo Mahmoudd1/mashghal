@@ -20,6 +20,26 @@ public interface FabricIntakeRepository extends JpaRepository<FabricIntake, Long
     boolean existsByParentIntakeId(Long parentIntakeId);
 
     /**
+     * A fabric type's batches with anything left in them, oldest first.
+     *
+     * <p>The order a store actually empties in, and so the order a summary cut's
+     * fabric is taken to have come out of. Batches with neither weight nor rolls
+     * left are dropped here rather than skipped later, so a fabric bought for
+     * years does not drag its whole history into the calculation.
+     */
+    @Query("""
+            select i from FabricIntake i
+            where i.fabricType.id = :fabricTypeId
+              and ((:derbyPool = true and i.derby is not null)
+                   or (:derbyPool = false and i.derby is null))
+              and (i.totalQuantity - i.consumedQuantity - i.wastedQuantity > 0
+                   or i.totalRolls - i.consumedRolls > 0)
+            order by i.intakeDate asc, i.id asc
+            """)
+    List<FabricIntake> openBatchesOldestFirst(
+            @Param("fabricTypeId") Long fabricTypeId, @Param("derbyPool") boolean derbyPool);
+
+    /**
      * The fabric type's most recent regular purchase, newest first.
      *
      * <p>What a derby of that fabric inherits its supplier and price from: the

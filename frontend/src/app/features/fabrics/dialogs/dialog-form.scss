@@ -152,3 +152,24 @@
 .soft-warning-strong {
   color: var(--mat-sys-error, #b3261e);
 }
+
+/* What the totals are about to take off the shelf, batch by batch. Shown while
+   they are typed, so the consequence is read before it happens. */
+.draw-preview {
+  margin-block-end: 0.75rem;
+  padding: 0.5rem 0.75rem;
+  border-radius: 0.5rem;
+  background: var(--mat-sys-surface-container-high);
+}
+
+.draw-row {
+  display: flex;
+  align-items: baseline;
+  gap: 0.5rem;
+  margin: 0.25rem 0;
+  font: var(--mat-sys-body-small);
+}
+
+.draw-row .spacer {
+  flex: 1 1 auto;
+}

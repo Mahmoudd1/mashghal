@@ -22,6 +22,7 @@ import com.apparel.tracking.production.dto.ModelFabricUsageDto;
 import com.apparel.tracking.production.dto.ModelRequest;
 import com.apparel.tracking.production.repository.CutModelAllocationRepository;
 import com.apparel.tracking.production.repository.CutModelSizeRepository;
+import com.apparel.tracking.production.repository.CutFabricDrawRepository;
 import com.apparel.tracking.production.repository.CutRollRepository;
 import com.apparel.tracking.production.repository.ModelRepository;
 import com.apparel.tracking.reference.repository.BranchRepository;
@@ -44,6 +45,7 @@ public class ModelService {
     private final CutModelAllocationRepository allocations;
     private final BranchRepository branches;
     private final CutRollRepository cutRolls;
+    private final CutFabricDrawRepository fabricDraws;
     private final CutModelSizeRepository cutModelSizes;
 
     public ModelService(
@@ -51,12 +53,14 @@ public class ModelService {
             CutModelAllocationRepository allocations,
             BranchRepository branches,
             CutRollRepository cutRolls,
-            CutModelSizeRepository cutModelSizes) {
+            CutModelSizeRepository cutModelSizes,
+            CutFabricDrawRepository fabricDraws) {
         this.models = models;
         this.allocations = allocations;
         this.branches = branches;
         this.cutRolls = cutRolls;
         this.cutModelSizes = cutModelSizes;
+        this.fabricDraws = fabricDraws;
     }
 
     @Transactional(readOnly = true)
@@ -109,6 +113,10 @@ public class ModelService {
         for (Object[] row : cutRolls.layersByCut()) {
             layersByCut.put((Long) row[0], ((Number) row[1]).intValue());
         }
+        // A summary cut has no rolls to sum its layers from; it states them.
+        for (Object[] row : fabricDraws.summaryLayersByCut()) {
+            layersByCut.put((Long) row[0], ((Number) row[1]).intValue());
+        }
 
         // cut -> model -> pieces per layer
         Map<Long, Map<Long, Integer>> perLayerByCut = new HashMap<>();
@@ -127,7 +135,13 @@ public class ModelService {
         Map<Key, Set<Long>> cutsSeen = new LinkedHashMap<>();
         Map<Long, Object[]> fabricNames = new HashMap<>();
 
-        for (Object[] row : cutRolls.consumptionByCutAndFabricType()) {
+        // Both ways of recording a cut, read the same way: consumption per cut and
+        // fabric type. Leaving the summary cuts out would drop them silently from
+        // the costing, which is exactly where their fabric matters most.
+        List<Object[]> consumption = new ArrayList<>(cutRolls.consumptionByCutAndFabricType());
+        consumption.addAll(fabricDraws.consumptionByCutAndFabricType());
+
+        for (Object[] row : consumption) {
             Long cutId = (Long) row[0];
             CutType cutType = (CutType) row[1];
             Long fabricTypeId = (Long) row[2];

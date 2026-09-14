@@ -76,6 +76,11 @@ public class CutRollService {
      */
     public CutRollDto addOrUpdate(Cut cut, CutRollRequest request) {
         cut.requireOpen();
+        if (cut.isSummary()) {
+            throw new BusinessRuleException("cut_is_summary",
+                    ("Cut %s was recorded from its totals; adding rolls to it would count the same "
+                            + "fabric twice").formatted(cut.getCutNumber()));
+        }
 
         FabricRoll roll = resolveRoll(cut, request);
         var existing = cutRolls.findByCutIdAndFabricRollId(cut.getId(), roll.getId());

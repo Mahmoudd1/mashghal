@@ -1,15 +1,18 @@
+import { DatePipe, DecimalPipe } from '@angular/common';
 import {
   ChangeDetectionStrategy,
+  DestroyRef,
   Component,
   computed,
   effect,
   inject,
   signal,
 } from '@angular/core';
-import { toSignal } from '@angular/core/rxjs-interop';
+import { takeUntilDestroyed, toSignal } from '@angular/core/rxjs-interop';
 import { FormBuilder, FormGroup, ReactiveFormsModule, Validators } from '@angular/forms';
 import { MatAutocompleteModule } from '@angular/material/autocomplete';
 import { MatButtonModule } from '@angular/material/button';
+import { MatButtonToggleModule } from '@angular/material/button-toggle';
 import { MatDatepickerModule } from '@angular/material/datepicker';
 import { MAT_DIALOG_DATA, MatDialogModule, MatDialogRef } from '@angular/material/dialog';
 import { MatFormFieldModule } from '@angular/material/form-field';
@@ -25,8 +28,14 @@ import { SizeService } from '../../../core/models/size.service';
 import { FabricUnit } from '../../../core/models/api.models';
 import { filterByName, findExact } from '../../../shared/lookup-autocomplete/lookup-filter';
 import { FabricService } from '../../fabrics/fabric.service';
-import { Cut, CutModelSizeRequest, CutType } from '../../../core/models/api.models';
-import { Observable, concat, last, of, switchMap } from 'rxjs';
+import {
+  Cut,
+  CutEntryMode,
+  CutFabricDraw,
+  CutModelSizeRequest,
+  CutType,
+} from '../../../core/models/api.models';
+import { Observable, concat, last, of, switchMap, debounceTime } from 'rxjs';
 
 import { toIsoDate } from '../../../shared/date-utils';
 import { ProductionService } from '../production.service';
@@ -54,6 +63,9 @@ export interface CutDialogData {
     ReactiveFormsModule,
     MatAutocompleteModule,
     MatButtonModule,
+    MatButtonToggleModule,
+    DatePipe,
+    DecimalPipe,
     MatDatepickerModule,
     MatDialogModule,
     MatFormFieldModule,
@@ -79,6 +91,7 @@ export class CutDialog {
   private readonly formBuilder = inject(FormBuilder);
 
   protected readonly cutTypes: CutType[] = ['MAIN', 'SECONDARY', 'DERBY'];
+  private readonly destroyRef = inject(DestroyRef);
   protected readonly saving = signal(false);
 
   /**
@@ -110,6 +123,17 @@ export class CutDialog {
     newTypeUnit: ['KG' as FabricUnit],
     cutDate: [this.data.cut ? new Date(this.data.cut.cutDate) : new Date(), Validators.required],
     cutLength: [this.data.cut?.cutLength ?? (null as number | null)],
+    // Totals, for a cut written up afterwards rather than built roll by roll.
+    entryMode: [this.data.cut?.entryMode ?? ('DETAILED' as CutEntryMode)],
+    totalRolls: [this.data.cut?.totalRolls ?? (null as number | null)],
+    reusedRolls: [this.data.cut?.reusedRolls ?? (null as number | null)],
+    totalWeight: [
+      this.data.cut
+        ? this.data.cut.totalWeightConsumed + this.data.cut.totalWasteWeight
+        : (null as number | null),
+    ],
+    wasteWeight: [this.data.cut?.totalWasteWeight ?? (null as number | null)],
+    totalLayers: [this.data.cut?.totalLayers ?? (null as number | null)],
     modelDescription: [this.data.cut?.modelDescription ?? '', Validators.maxLength(512)],
     // One entry per model this cut produces. The first is the cut's own model,
     // the one the create call names; the rest join through their marker rows.
@@ -122,6 +146,25 @@ export class CutDialog {
   private readonly selectedType = toSignal(this.form.controls.cutType.valueChanges, {
     initialValue: this.form.controls.cutType.value,
   });
+
+  /**
+   * How this cut's fabric is being written down. Fixed once a cut exists: the
+   * two ways describe the same fabric and would be counted twice.
+   */
+  protected readonly entryMode = toSignal(this.form.controls.entryMode.valueChanges, {
+    initialValue: this.form.controls.entryMode.value,
+  });
+
+  protected readonly isSummary = computed(() => this.entryMode() === 'SUMMARY');
+  protected readonly modeLocked = this.data.cut !== undefined;
+
+  /** Which batches the totals would empty, and what stops them being saved. */
+  protected readonly draw = signal<CutFabricDraw[]>([]);
+  protected readonly drawError = signal<string | null>(null);
+
+  protected readonly drawnConsumed = computed(() =>
+    this.draw().reduce((sum, row) => sum + row.weightConsumed, 0),
+  );
 
   /** Only SECONDARY and DERBY cuts name a parent. */
   protected readonly needsParent = computed(() => this.selectedType() !== 'MAIN');
@@ -301,6 +344,50 @@ export class CutDialog {
     );
   }
 
+  /**
+   * Asks the server which batches these totals would empty.
+   *
+   * <p>Only the server knows what each batch holds right now, so the preview is
+   * a round trip rather than arithmetic here. Debounced because it fires on
+   * every keystroke, and errors are kept rather than thrown: "there is not
+   * enough of this fabric" belongs on screen while typing, not on submit.
+   */
+  private watchDraw(): void {
+    this.form.valueChanges
+      .pipe(debounceTime(400), takeUntilDestroyed(this.destroyRef))
+      .subscribe(() => {
+        const raw = this.form.getRawValue();
+        const type = this.matchedType();
+        if (raw.entryMode !== 'SUMMARY' || !type || !raw.totalWeight || !raw.totalRolls) {
+          this.draw.set([]);
+          this.drawError.set(null);
+          return;
+        }
+        this.production
+          .previewCutDraw({
+            fabricTypeId: type.id,
+            cutType: raw.cutType,
+            totalWeight: raw.totalWeight,
+            wasteWeight: raw.wasteWeight ?? 0,
+            newRolls: raw.totalRolls - (raw.reusedRolls ?? 0),
+          })
+          .subscribe({
+            next: (rows) => {
+              this.draw.set(rows);
+              this.drawError.set(null);
+            },
+            error: (response) => {
+              this.draw.set([]);
+              this.drawError.set(response?.error?.code ?? 'cut_summary_insufficient_fabric');
+            },
+          });
+      });
+  }
+
+  constructor() {
+    this.watchDraw();
+  }
+
   protected save(): void {
     if (this.form.invalid || this.saving() || this.blocked()) {
       return;
@@ -356,6 +443,18 @@ export class CutDialog {
       labelAr: raw.labelAr.trim() || null,
       labelEn: raw.labelEn.trim() || null,
       note: raw.note.trim() || null,
+      entryMode: raw.entryMode,
+      // Sent only in summary mode; a detailed cut derives all of this from its
+      // rolls, and sending both would describe the same fabric twice.
+      ...(raw.entryMode === 'SUMMARY'
+        ? {
+            totalRolls: raw.totalRolls,
+            reusedRolls: raw.reusedRolls ?? 0,
+            totalWeight: raw.totalWeight,
+            wasteWeight: raw.wasteWeight ?? 0,
+            totalLayers: raw.totalLayers,
+          }
+        : {}),
     };
 
     if (this.data.cut) {

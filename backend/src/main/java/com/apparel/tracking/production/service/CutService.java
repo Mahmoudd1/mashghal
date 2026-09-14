@@ -67,6 +67,7 @@ public class CutService {
     private final CutRollRepository cutRolls;
     private final CutModelSizeRepository cutModelSizes;
     private final CutRollService cutRollService;
+    private final CutSummaryService summaryService;
     private final GarmentSizeRepository sizes;
     private final AuditService audit;
     private final PipelineService pipeline;
@@ -82,7 +83,8 @@ public class CutService {
             CutRollService cutRollService,
             GarmentSizeRepository sizes,
             AuditService audit,
-            PipelineService pipeline) {
+            PipelineService pipeline,
+            CutSummaryService summaryService) {
         this.cuts = cuts;
         this.models = models;
         this.branches = branches;
@@ -94,6 +96,7 @@ public class CutService {
         this.sizes = sizes;
         this.audit = audit;
         this.pipeline = pipeline;
+        this.summaryService = summaryService;
     }
 
     @Transactional(readOnly = true)
@@ -106,10 +109,21 @@ public class CutService {
 
         return page.map(cut -> {
             Object[] totals = rollTotals.get(cut.getId());
-            int layers = totals == null ? 0 : ((Number) totals[0]).intValue();
-            BigDecimal consumed = totals == null ? BigDecimal.ZERO : (BigDecimal) totals[1];
-            BigDecimal defect = totals == null ? BigDecimal.ZERO : (BigDecimal) totals[2];
-            return CutDto.summary(cut, layers, consumed, defect, allocated.getOrDefault(cut.getId(), 0L));
+            // A summary cut has no rolls to sum, so it reports what it was told.
+            int layers = cut.isSummary()
+                    ? cut.getTotalLayers()
+                    : (totals == null ? 0 : ((Number) totals[0]).intValue());
+            BigDecimal consumed = cut.isSummary()
+                    ? cut.consumedWeight()
+                    : (totals == null ? BigDecimal.ZERO : (BigDecimal) totals[1]);
+            BigDecimal defect = cut.isSummary()
+                    ? BigDecimal.ZERO
+                    : (totals == null ? BigDecimal.ZERO : (BigDecimal) totals[2]);
+            BigDecimal waste = cut.isSummary()
+                    ? cut.getWasteWeight()
+                    : (totals == null ? BigDecimal.ZERO : (BigDecimal) totals[3]);
+            return CutDto.summary(
+                    cut, layers, consumed, defect, waste, allocated.getOrDefault(cut.getId(), 0L));
         });
     }
 
@@ -142,8 +156,12 @@ public class CutService {
         cut.assignParent(resolveParent(request));
         // Opening a cut is normally the moment its model comes into being.
         cut.setPrimaryModel(resolvePrimaryModel(request));
+        applySummaryTotals(cut, request);
 
-        return detailOf(cuts.save(cut));
+        Cut saved = cuts.save(cut);
+        // The fabric leaves the batches here; a detailed cut does it roll by roll.
+        summaryService.apply(saved);
+        return detailOf(saved);
     }
 
     public CutDto update(Long id, CutRequest request) {
@@ -162,13 +180,26 @@ public class CutService {
                     "A cut's type cannot change after it is created");
         }
 
+        // How a cut's fabric is written down cannot change once it has any: the
+        // two ways describe the same fabric and would be counted twice.
+        if (cut.getEntryMode() != request.entryModeOrDefault()) {
+            throw new BusinessRuleException("cut_entry_mode_immutable",
+                    "A cut recorded from its totals cannot become a roll-by-roll cut, or the other way about");
+        }
+
+        // Put the fabric back before the new figures take it again, so an edit is
+        // never a delta on top of a stale draw.
+        summaryService.reverse(cut);
+
         cut.setCutNumber(request.cutNumber());
         cut.setBranch(requireBranch(request.branchId()));
         cut.setFabricType(resolveFabricType(request.fabricTypeId()));
         applyEditableFields(cut, request);
         cut.assignParent(resolveParent(request));
         cut.setPrimaryModel(resolvePrimaryModel(request));
+        applySummaryTotals(cut, request);
 
+        summaryService.apply(cut);
         return detailOf(cut);
     }
 
@@ -217,7 +248,53 @@ public class CutService {
         for (CutRoll line : cutRolls.findByCut(id)) {
             cutRollService.remove(line.getId());
         }
+        summaryService.reverse(cut);
         cuts.delete(cut);
+    }
+
+    /**
+     * Copies the totals of a cut written up from a paper sheet.
+     *
+     * <p>Cleared outright on a detailed cut, so a cut that carries rolls can
+     * never also carry totals describing the same fabric.
+     */
+    private void applySummaryTotals(Cut cut, CutRequest request) {
+        cut.setEntryMode(request.entryModeOrDefault());
+
+        if (!cut.isSummary()) {
+            cut.setTotalRolls(null);
+            cut.setReusedRolls(null);
+            cut.setTotalWeight(null);
+            cut.setWasteWeight(null);
+            cut.setTotalLayers(null);
+            return;
+        }
+
+        if (request.totalRolls() == null || request.totalWeight() == null
+                || request.totalLayers() == null) {
+            throw new BusinessRuleException("cut_summary_totals_required",
+                    "A cut recorded from its totals needs its rolls, weight and layers");
+        }
+
+        int reused = request.reusedRolls() == null ? 0 : request.reusedRolls();
+        if (reused > request.totalRolls()) {
+            throw new BusinessRuleException("cut_summary_reused_exceeds_total",
+                    "%d rolls were already open, which is more than the %d on the cut"
+                            .formatted(reused, request.totalRolls()));
+        }
+
+        BigDecimal waste = request.wasteWeight() == null ? BigDecimal.ZERO : request.wasteWeight();
+        if (waste.compareTo(request.totalWeight()) > 0) {
+            throw new BusinessRuleException("cut_summary_waste_exceeds_weight",
+                    "The عجز of %s is more than the %s the cut took off the shelf"
+                            .formatted(waste, request.totalWeight()));
+        }
+
+        cut.setTotalRolls(request.totalRolls());
+        cut.setReusedRolls(reused);
+        cut.setTotalWeight(request.totalWeight());
+        cut.setWasteWeight(waste);
+        cut.setTotalLayers(request.totalLayers());
     }
 
     // --- model allocations -------------------------------------------------
@@ -414,7 +491,7 @@ public class CutService {
             return;
         }
 
-        int layers = totalLayers(cut.getId());
+        int layers = totalLayers(cut);
 
         // Sizes inherit the model's sewing branch; failing that, the cut's own.
         Branch fallback = model.getSewingBranch() != null ? model.getSewingBranch() : cut.getBranch();
@@ -588,7 +665,7 @@ public class CutService {
         }
         Map<Long, Object[]> totals = new HashMap<>();
         for (Object[] row : cutRolls.totalsByCutIds(cutIds)) {
-            totals.put((Long) row[0], new Object[] {row[1], row[2], row[3]});
+            totals.put((Long) row[0], new Object[] {row[1], row[2], row[3], row[4]});
         }
         return totals;
     }
@@ -612,12 +689,22 @@ public class CutService {
     /** Assembles the full cut view: rolls, marker, derived totals, allocations. */
     private CutDto detailOf(Cut cut) {
         List<CutRoll> rollLines = cutRolls.findByCut(cut.getId());
-        int layers = rollLines.stream().mapToInt(CutRoll::getLayers).sum();
-        BigDecimal consumed = rollLines.stream()
+        boolean summary = cut.isSummary();
+
+        // Derived from the rolls, or read off the cut — never both, so the same
+        // fabric is never counted from two directions.
+        int layers = summary ? cut.getTotalLayers() : rollLines.stream()
+                .mapToInt(CutRoll::getLayers).sum();
+        BigDecimal consumed = summary ? cut.consumedWeight() : rollLines.stream()
                 .map(CutRoll::getWeightConsumed)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
-        BigDecimal defect = rollLines.stream()
+        BigDecimal defect = summary ? BigDecimal.ZERO : rollLines.stream()
                 .map(CutRoll::getDefectWeight)
+                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        // The عجز, however it was recorded: one figure on a summary cut, the sum
+        // of the leftovers binned with each roll on a detailed one.
+        BigDecimal waste = summary ? cut.getWasteWeight() : rollLines.stream()
+                .map(CutRoll::getWasteWeight)
                 .reduce(BigDecimal.ZERO, BigDecimal::add);
 
         // Resolve inheritance here so the UI is told where each size is actually
@@ -634,20 +721,30 @@ public class CutService {
                 .toList();
 
         return CutDto.detail(
-                cut, layers, consumed, defect,
+                cut, layers, consumed, defect, waste,
                 derivedTotals(cut),
                 modelAllocationDtos(cut.getId()),
                 sizeRows,
-                rollLines.stream().map(CutRollDto::from).toList());
+                rollLines.stream().map(CutRollDto::from).toList(),
+                summaryService.forCut(cut.getId()));
     }
 
     private List<CutRollDto> rollDtos(Long cutId) {
         return cutRolls.findByCut(cutId).stream().map(CutRollDto::from).toList();
     }
 
-    /** Layers summed across the cut's rolls — the multiplier the marker uses. */
-    private int totalLayers(Long cutId) {
-        return cutRolls.findByCut(cutId).stream().mapToInt(CutRoll::getLayers).sum();
+    /**
+     * The multiplier the marker uses: layers laid out on this cut.
+     *
+     * <p>Summed from the rolls when the cut was built from them, and read off the
+     * cut itself when it was written up from its totals. Everything downstream —
+     * derived pieces, the branch split, the allocation balance — multiplies by
+     * this, so a summary cut that reported zero here would yield no pieces at all.
+     */
+    private int totalLayers(Cut cut) {
+        return cut.isSummary()
+                ? cut.getTotalLayers()
+                : cutRolls.findByCut(cut.getId()).stream().mapToInt(CutRoll::getLayers).sum();
     }
 
     /**
@@ -656,7 +753,7 @@ public class CutService {
      * leaves its allocation free-form — cuts entered the older way still work.
      */
     private List<CutModelDerivedDto> derivedTotals(Cut cut) {
-        int layers = totalLayers(cut.getId());
+        int layers = totalLayers(cut);
 
         Map<Long, Integer> perLayer = new LinkedHashMap<>();
         Map<Long, Model> modelsById = new LinkedHashMap<>();
@@ -698,7 +795,7 @@ public class CutService {
             return;
         }
 
-        long derived = (long) totalLayers(cut.getId()) * piecesPerLayer;
+        long derived = (long) totalLayers(cut) * piecesPerLayer;
         long otherBranches = modelAllocations.findByCut(cut.getId()).stream()
                 .filter(a -> a.getModel().getId().equals(model.getId()))
                 .mapToLong(CutModelAllocation::getQuantityAllocated)
@@ -708,7 +805,7 @@ public class CutService {
             throw new BusinessRuleException("allocation_exceeds_derived_pieces",
                     ("Model %s yields %d pieces from this cut (%d layers x %d per layer); "
                                     + "allocating %d would take the total to %d.")
-                            .formatted(model.getModelNumber(), derived, totalLayers(cut.getId()), piecesPerLayer,
+                            .formatted(model.getModelNumber(), derived, totalLayers(cut), piecesPerLayer,
                                     newQuantity, otherBranches + newQuantity));
         }
     }

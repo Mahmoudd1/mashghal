@@ -30,6 +30,10 @@ import org.springframework.web.bind.annotation.PathVariable;
 import org.springframework.web.bind.annotation.PostMapping;
 import org.springframework.web.bind.annotation.PutMapping;
 import org.springframework.web.bind.annotation.RequestBody;
+import java.math.BigDecimal;
+import com.apparel.tracking.production.dto.CutFabricDrawDto;
+import com.apparel.tracking.production.dto.CutSummaryPreviewRequest;
+import com.apparel.tracking.production.service.CutSummaryService;
 import org.springframework.web.bind.annotation.RequestMapping;
 import org.springframework.web.bind.annotation.RequestParam;
 import org.springframework.web.bind.annotation.ResponseStatus;
@@ -41,9 +45,11 @@ import org.springframework.web.bind.annotation.RestController;
 public class CutController {
 
     private final CutService service;
+    private final CutSummaryService summaryService;
 
-    public CutController(CutService service) {
+    public CutController(CutService service, CutSummaryService summaryService) {
         this.service = service;
+        this.summaryService = summaryService;
     }
 
     @GetMapping
@@ -77,6 +83,17 @@ public class CutController {
     @PutMapping("/{id}")
     public CutDto update(@PathVariable Long id, @Valid @RequestBody CutRequest request) {
         return service.update(id, request);
+    }
+
+    @PostMapping("/summary-preview")
+    @Operation(summary = "Which batches a summary cut would draw on, without saving anything")
+    public List<CutFabricDrawDto> summaryPreview(@Valid @RequestBody CutSummaryPreviewRequest request) {
+        return summaryService.preview(
+                request.fabricTypeId(),
+                request.cutType(),
+                request.totalWeight(),
+                request.wasteWeight() == null ? BigDecimal.ZERO : request.wasteWeight(),
+                request.newRolls());
     }
 
     @PostMapping("/{id}/close")

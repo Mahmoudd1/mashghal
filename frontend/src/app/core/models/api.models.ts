@@ -151,11 +151,18 @@ export interface Cut {
   labelAr: string | null;
   labelEn: string | null;
   note: string | null;
-  /** Layers summed across every roll on the cut — the marker's multiplier. */
+  /** How the cut's fabric was written down: roll by roll, or as totals. */
+  entryMode: CutEntryMode;
+  /** Layers laid out: summed from the rolls, or stated on a summary cut. */
   totalLayers: number;
   totalWeightConsumed: number;
   totalDefectWeight: number;
   defectPercentage: number;
+  /** The عجز — fabric binned rather than cut, however it was recorded. */
+  totalWasteWeight: number;
+  /** Summary cuts only. */
+  totalRolls: number | null;
+  reusedRolls: number | null;
   derivedPieces: number;
   totalAllocatedPieces: number;
   weightPerPiece: number;
@@ -163,6 +170,32 @@ export interface Cut {
   modelAllocations: CutModelAllocation[];
   sizeBreakdown: CutModelSize[];
   rolls: CutRoll[];
+  /** Which batches a summary cut drew on; empty for a detailed one. */
+  fabricDraws: CutFabricDraw[];
+}
+
+export type CutEntryMode = 'DETAILED' | 'SUMMARY';
+
+/** One batch's share of a summary cut, worked out oldest-batch-first. */
+export interface CutFabricDraw {
+  /** Null on a preview, which is calculated but not yet saved. */
+  id: number | null;
+  fabricIntakeId: number;
+  intakeDate: string;
+  supplierNameAr: string | null;
+  weightConsumed: number;
+  wasteWeight: number;
+  rollCount: number;
+}
+
+/** What the summary form asks while its totals are being typed. */
+export interface CutSummaryPreviewRequest {
+  fabricTypeId: number;
+  cutType: CutType;
+  totalWeight: number;
+  wasteWeight: number;
+  /** Rolls off a batch: the cut's rolls less any that were already open. */
+  newRolls: number;
 }
 
 export interface ModelCuts {
@@ -198,6 +231,14 @@ export interface CutRequest {
   labelAr: string | null;
   labelEn: string | null;
   note: string | null;
+  /** Omitted or DETAILED builds the cut from its rolls; SUMMARY needs the totals below. */
+  entryMode?: CutEntryMode;
+  totalRolls?: number | null;
+  reusedRolls?: number | null;
+  /** Fabric off the shelf, the عجز included. */
+  totalWeight?: number | null;
+  wasteWeight?: number | null;
+  totalLayers?: number | null;
 }
 
 export interface CutModelAllocationRequest {

@@ -247,6 +247,96 @@
       <input matInput type="number" step="0.001" min="0" formControlName="cutLength" dir="ltr" />
     </mat-form-field>
 
+    <!-- Roll by roll at the table, or the totals off a paper sheet afterwards.
+         Fixed once the cut exists: the two describe the same fabric. -->
+    <h3 class="dialog-section">{{ 'cut.fabricSection' | translate }}</h3>
+
+    <mat-button-toggle-group formControlName="entryMode" class="source-toggle">
+      <mat-button-toggle value="DETAILED" [disabled]="modeLocked">
+        {{ 'cut.entryDetailed' | translate }}
+      </mat-button-toggle>
+      <mat-button-toggle value="SUMMARY" [disabled]="modeLocked">
+        {{ 'cut.entrySummary' | translate }}
+      </mat-button-toggle>
+    </mat-button-toggle-group>
+
+    @if (!isSummary()) {
+      <p class="action-hint">{{ 'cut.entryDetailedHint' | translate }}</p>
+    } @else {
+      <p class="action-hint">{{ 'cut.entrySummaryHint' | translate }}</p>
+
+      <div class="color-entry-row">
+        <mat-form-field appearance="outline">
+          <mat-label>{{ 'cut.totalRolls' | translate }}</mat-label>
+          <input matInput type="number" min="1" step="1" formControlName="totalRolls" dir="ltr" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>{{ 'cut.reusedRolls' | translate }}</mat-label>
+          <input matInput type="number" min="0" step="1" formControlName="reusedRolls" dir="ltr" />
+          <mat-hint>{{ 'cut.reusedRollsHint' | translate }}</mat-hint>
+        </mat-form-field>
+      </div>
+
+      <div class="color-entry-row">
+        <mat-form-field appearance="outline">
+          <mat-label>{{ 'cut.totalWeight' | translate }}</mat-label>
+          <input
+            matInput
+            type="number"
+            step="0.001"
+            min="0"
+            formControlName="totalWeight"
+            dir="ltr"
+          />
+          <mat-hint>{{ 'cut.totalWeightHint' | translate }}</mat-hint>
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>{{ 'cut.shortage' | translate }}</mat-label>
+          <input
+            matInput
+            type="number"
+            step="0.001"
+            min="0"
+            formControlName="wasteWeight"
+            dir="ltr"
+          />
+          <mat-hint>{{ 'cut.shortageHint' | translate }}</mat-hint>
+        </mat-form-field>
+      </div>
+
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'cut.totalLayers' | translate }}</mat-label>
+        <input matInput type="number" min="1" step="1" formControlName="totalLayers" dir="ltr" />
+      </mat-form-field>
+
+      <!-- What the totals are about to take off the shelf, worked out as they
+           are typed so the consequence is visible before saving. -->
+      @if (drawError()) {
+        <p class="soft-warning soft-warning-strong">
+          <mat-icon inline>warning</mat-icon>
+          {{ 'errors.' + drawError() | translate }}
+        </p>
+      } @else if (draw().length > 0) {
+        <div class="draw-preview">
+          <p class="fact-label">{{ 'cut.drawPreview' | translate }}</p>
+          @for (row of draw(); track row.fabricIntakeId) {
+            <p class="draw-row">
+              <span class="numeric">{{ row.intakeDate | date: 'dd/MM/yyyy' }}</span>
+              <span>{{ row.supplierNameAr ?? ('supplier.unknown' | translate) }}</span>
+              <span class="spacer"></span>
+              <span class="numeric">{{ row.weightConsumed | number: '1.0-3' }}</span>
+              @if (row.wasteWeight > 0) {
+                <span class="numeric waste-hint"> +{{ row.wasteWeight | number: '1.0-3' }} </span>
+              }
+              <span class="numeric">{{ row.rollCount }} {{ 'cut.rolls' | translate }}</span>
+            </p>
+          }
+        </div>
+      }
+    }
+
     <mat-form-field appearance="outline">
       <mat-label>{{ 'cut.modelDescription' | translate }}</mat-label>
       <textarea matInput rows="2" formControlName="modelDescription"></textarea>

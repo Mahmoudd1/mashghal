@@ -27,6 +27,7 @@ import com.apparel.tracking.pipeline.dto.ReceiveRequest;
 import com.apparel.tracking.pipeline.dto.SellRequest;
 import com.apparel.tracking.pipeline.dto.StageMoveRequest;
 import com.apparel.tracking.pipeline.service.PipelineService;
+import com.apparel.tracking.production.domain.CutEntryMode;
 import com.apparel.tracking.production.domain.CutType;
 import com.apparel.tracking.production.dto.CutDto;
 import com.apparel.tracking.production.dto.CutModelAllocationRequest;
@@ -294,21 +295,35 @@ public class DemoDataSeeder implements ApplicationRunner {
 
         ids.put("CUT-1", cuts.create(new CutRequest(
                 "CUT-1", CutType.MAIN, null, agamy, cottonType, "200", "قميص كلاسيك", agamy, null, null, today.minusDays(45),
-                BigDecimal.valueOf(6.5), "قميص كلاسيك وتي شيرت", "تقطيعة القمصان", "Shirt run", null)).id());
+                BigDecimal.valueOf(6.5), "قميص كلاسيك وتي شيرت", "تقطيعة القمصان", "Shirt run", null,
+                null, null, null, null, null, null)).id());
         ids.put("CUT-2", cuts.create(new CutRequest(
                 "CUT-2", CutType.MAIN, null, smouha, denimType, "500", "بنطلون جينز", smouha, null, null, today.minusDays(30),
-                BigDecimal.valueOf(7.25), "بنطلون جينز", "تقطيعة الجينز", "Denim run", null)).id());
+                BigDecimal.valueOf(7.25), "بنطلون جينز", "تقطيعة الجينز", "Denim run", null,
+                null, null, null, null, null, null)).id());
         ids.put("CUT-3", cuts.create(new CutRequest(
                 "CUT-3", CutType.MAIN, null, agamy, linenType, "620", "جاكيت كتان", agamy, null, null, today.minusDays(12),
-                BigDecimal.valueOf(5.0), "جاكيت كتان", "تقطيعة الكتان", "Linen run", null)).id());
+                BigDecimal.valueOf(5.0), "جاكيت كتان", "تقطيعة الكتان", "Linen run", null,
+                null, null, null, null, null, null)).id());
 
         // Secondary and derby cuts hang off a main cut.
         ids.put("CUT-1S", cuts.create(new CutRequest(
                 "CUT-1S", CutType.SECONDARY, ids.get("CUT-1"), agamy, cottonType, "310", "تي شيرت قطن", agamy, null, null, today.minusDays(40),
-                BigDecimal.valueOf(2.0), "أكمام إضافية", "أكمام إضافية", "Extra sleeves", null)).id());
+                BigDecimal.valueOf(2.0), "أكمام إضافية", "أكمام إضافية", "Extra sleeves", null,
+                null, null, null, null, null, null)).id());
         ids.put("CUT-2D", cuts.create(new CutRequest(
                 "CUT-2D", CutType.DERBY, ids.get("CUT-2"), smouha, denimType, "500", "بنطلون جينز", smouha, null, null, today.minusDays(25),
-                BigDecimal.valueOf(3.5), "دربي الجينز", "دربي الجينز", "Denim derby", null)).id());
+                BigDecimal.valueOf(3.5), "دربي الجينز", "دربي الجينز", "Denim derby", null,
+                null, null, null, null, null, null)).id());
+
+        // Written up afterwards from a paper sheet: no roll detail, just the
+        // totals, with the fabric drawn off the cotton batches oldest first.
+        ids.put("CUT-4", cuts.create(new CutRequest(
+                "CUT-4", CutType.MAIN, null, smouha, cottonType, "740", "بيجامة قطن", smouha, null, null,
+                today.minusDays(6),
+                BigDecimal.valueOf(4.25), "بيجامة قطن", "تقطيعة البيجامة", "Pyjama run", "مسجلة بالإجمالي",
+                CutEntryMode.SUMMARY,
+                18, 3, BigDecimal.valueOf(162.500), BigDecimal.valueOf(4.500), 430)).id());
 
         return ids;
     }

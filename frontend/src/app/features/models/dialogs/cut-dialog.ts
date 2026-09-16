@@ -156,6 +156,11 @@ export class CutDialog {
   });
 
   protected readonly isSummary = computed(() => this.entryMode() === 'SUMMARY');
+
+  /** A secondary run is spent from its main cut, not drawn from the batches. */
+  protected readonly absorbedByParent = computed(
+    () => this.isSummary() && this.selectedType() === 'SECONDARY',
+  );
   protected readonly modeLocked = this.data.cut !== undefined;
 
   /** Which batches the totals would empty, and what stops them being saved. */
@@ -177,6 +182,48 @@ export class CutDialog {
   protected onTypeChange(): void {
     if (!this.needsParent()) {
       this.form.controls.parentMainCutId.setValue(null);
+    }
+  }
+
+  /**
+   * Fills a secondary or derby run in from the main cut it hangs off.
+   *
+   * <p>It is the same run continued: the same fabric, usually at the same branch,
+   * for the same model. Typing all of that again is transcription, and getting it
+   * wrong is how a child ends up laid out in a fabric its parent never used.
+   *
+   * <p>Only ever fills what is still blank, so a value already typed is never
+   * overwritten, and everything stays editable — a secondary run is sometimes
+   * sewn somewhere else.
+   */
+  protected onParentChange(): void {
+    const parent = this.parentOptions().find(
+      (candidate) => candidate.id === this.form.controls.parentMainCutId.value,
+    );
+    if (!parent) {
+      return;
+    }
+
+    const patch: Record<string, unknown> = {};
+    if (this.form.controls.branchId.value === null) {
+      patch['branchId'] = parent.branchId;
+    }
+    if (this.form.controls.fabricTypeName.value.trim() === '') {
+      patch['fabricTypeName'] = parent.fabricTypeNameAr ?? '';
+    }
+    if (this.form.controls.cutLength.value === null) {
+      patch['cutLength'] = parent.cutLength;
+    }
+    this.form.patchValue(patch);
+
+    // The model is the first card's, which is the cut's own model.
+    const firstModel = this.modelRows[0];
+    const typedNumber = (firstModel?.get('modelNumber')?.value as string) ?? '';
+    if (firstModel && typedNumber.trim() === '') {
+      firstModel.patchValue({
+        modelNumber: parent.primaryModelNumber ?? '',
+        modelNameAr: parent.primaryModelNameAr ?? '',
+      });
     }
   }
 
@@ -358,7 +405,15 @@ export class CutDialog {
       .subscribe(() => {
         const raw = this.form.getRawValue();
         const type = this.matchedType();
-        if (raw.entryMode !== 'SUMMARY' || !type || !raw.totalWeight || !raw.totalRolls) {
+        // A secondary run takes nothing off the shelf, so there is no batch draw
+        // to preview — its fabric came out of the main cut's.
+        if (
+          raw.entryMode !== 'SUMMARY' ||
+          raw.cutType === 'SECONDARY' ||
+          !type ||
+          !raw.totalWeight ||
+          !raw.totalRolls
+        ) {
           this.draw.set([]);
           this.drawError.set(null);
           return;

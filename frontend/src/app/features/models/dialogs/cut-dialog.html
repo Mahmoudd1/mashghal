@@ -22,11 +22,12 @@
     @if (needsParent()) {
       <mat-form-field appearance="outline">
         <mat-label>{{ 'cut.parent' | translate }}</mat-label>
-        <mat-select formControlName="parentMainCutId">
+        <mat-select formControlName="parentMainCutId" (selectionChange)="onParentChange()">
           @for (parent of parentOptions(); track parent.id) {
             <mat-option [value]="parent.id">{{ parent.cutNumber }}</mat-option>
           }
         </mat-select>
+        <mat-hint>{{ 'cut.parentFillsHint' | translate }}</mat-hint>
       </mat-form-field>
     }
 
@@ -313,7 +314,12 @@
 
       <!-- What the totals are about to take off the shelf, worked out as they
            are typed so the consequence is visible before saving. -->
-      @if (drawError()) {
+      @if (absorbedByParent()) {
+        <p class="action-hint">
+          <mat-icon inline>subdirectory_arrow_right</mat-icon>
+          {{ 'cut.secondaryAbsorbedHint' | translate }}
+        </p>
+      } @else if (drawError()) {
         <p class="soft-warning soft-warning-strong">
           <mat-icon inline>warning</mat-icon>
           {{ 'errors.' + drawError() | translate }}

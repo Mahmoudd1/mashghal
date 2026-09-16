@@ -722,6 +722,7 @@ public class CutService {
 
         return CutDto.detail(
                 cut, layers, consumed, defect, waste,
+                summaryService.chargedByChildren(cut.getId()),
                 derivedTotals(cut),
                 modelAllocationDtos(cut.getId()),
                 sizeRows,

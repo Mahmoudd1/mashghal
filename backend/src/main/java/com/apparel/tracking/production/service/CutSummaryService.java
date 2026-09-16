@@ -11,6 +11,7 @@ import com.apparel.tracking.production.domain.CutFabricDraw;
 import com.apparel.tracking.production.domain.CutType;
 import com.apparel.tracking.production.dto.CutFabricDrawDto;
 import com.apparel.tracking.production.repository.CutFabricDrawRepository;
+import com.apparel.tracking.production.repository.CutRepository;
 import com.apparel.tracking.fabric.repository.FabricIntakeRepository;
 
 import org.springframework.stereotype.Service;
@@ -36,10 +37,13 @@ public class CutSummaryService {
 
     private final CutFabricDrawRepository draws;
     private final FabricIntakeRepository intakes;
+    private final CutRepository cuts;
 
-    public CutSummaryService(CutFabricDrawRepository draws, FabricIntakeRepository intakes) {
+    public CutSummaryService(
+            CutFabricDrawRepository draws, FabricIntakeRepository intakes, CutRepository cuts) {
         this.draws = draws;
         this.intakes = intakes;
+        this.cuts = cuts;
     }
 
     /**
@@ -78,6 +82,14 @@ public class CutSummaryService {
     /** Draws the cut's fabric off the batches and records where it came from. */
     public void apply(Cut cut) {
         if (!cut.isSummary()) {
+            return;
+        }
+        // A secondary run is cut from what the main run already took off the
+        // shelf — the remnants of its own rolls. Drawing again would take the
+        // same fabric from the batches twice, so this only checks that the main
+        // cut is big enough to have covered it.
+        if (cut.getCutType() == CutType.SECONDARY) {
+            requireParentCovers(cut);
             return;
         }
         if (cut.getFabricType() == null) {
@@ -134,6 +146,40 @@ public class CutSummaryService {
             batch.releaseRolls(draw.getRollCount());
         }
         draws.deleteAll(recorded);
+    }
+
+    /**
+     * Checks a secondary run against the main cut it is spent from.
+     *
+     * <p>The main cut's weight has to cover every secondary run hanging off it.
+     * Beyond that there is nothing to enforce: what the main run kept for itself
+     * is simply what its children did not take.
+     */
+    private void requireParentCovers(Cut cut) {
+        Cut parent = cut.getParentMainCut();
+        if (parent == null) {
+            throw new BusinessRuleException("cut_parent_required",
+                    "A secondary cut must reference the MAIN cut it is spent from");
+        }
+
+        BigDecimal parentTotal = parent.isSummary()
+                ? parent.getTotalWeight()
+                : cuts.rollWeightOffTheShelf(parent.getId());
+        BigDecimal siblings = cuts.secondaryWeightCharged(parent.getId(), cut.getId());
+        BigDecimal wanted = siblings.add(cut.getTotalWeight());
+
+        if (parentTotal == null || wanted.compareTo(parentTotal) > 0) {
+            throw new BusinessRuleException("cut_secondary_exceeds_parent",
+                    ("Cut %s took %s off the shelf; its secondary runs would spend %s of it")
+                            .formatted(parent.getCutNumber(),
+                                    parentTotal == null ? BigDecimal.ZERO : parentTotal, wanted));
+        }
+    }
+
+    /** What this cut's secondary runs have charged against it. */
+    @Transactional(readOnly = true)
+    public BigDecimal chargedByChildren(Long cutId) {
+        return cuts.secondaryWeightCharged(cutId, null);
     }
 
     @Transactional(readOnly = true)

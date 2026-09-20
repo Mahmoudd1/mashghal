@@ -1,5 +1,6 @@
 package com.apparel.tracking.production.repository;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import com.apparel.tracking.production.domain.Cut;
@@ -17,6 +18,36 @@ public interface CutRepository extends JpaRepository<Cut, Long> {
     boolean existsByCutNumberIgnoreCase(String cutNumber);
 
     boolean existsByParentMainCutId(Long parentId);
+
+    /**
+     * What a main cut's secondary runs have already charged against it.
+     *
+     * <p>Their fabric came off rolls this cut drew, so it is spent from the same
+     * total rather than taken from the batches again. {@code excludeCutId} leaves
+     * the row being edited out of its own headroom check.
+     *
+     * <p>A secondary run that names the batch it was cut from is not counted: it
+     * took its fabric off the shelf itself, so charging it here as well would
+     * spend the main cut's weight on fabric it never held.
+     */
+    @Query("""
+            select coalesce(sum(c.totalWeight), 0)
+            from Cut c
+            where c.parentMainCut.id = :parentId
+              and c.cutType = com.apparel.tracking.production.domain.CutType.SECONDARY
+              and c.entryMode = com.apparel.tracking.production.domain.CutEntryMode.SUMMARY
+              and c.fabricIntake is null
+              and (:excludeCutId is null or c.id <> :excludeCutId)
+            """)
+    BigDecimal secondaryWeightCharged(
+            @Param("parentId") Long parentId, @Param("excludeCutId") Long excludeCutId);
+
+    /** What a detailed cut actually took off the rolls, cut and binned alike. */
+    @Query("""
+            select coalesce(sum(cr.weightConsumed + cr.wasteWeight), 0)
+            from CutRoll cr where cr.cut.id = :cutId
+            """)
+    BigDecimal rollWeightOffTheShelf(@Param("cutId") Long cutId);
 
     List<Cut> findAllByParentMainCutIdOrderByCutDateAsc(Long parentId);
 

@@ -16,7 +16,13 @@ import com.apparel.tracking.production.domain.CutType;
  * @param defectPercentage spoilage as a share of the fabric consumed, to two places
  * @param totalWasteWeight the عجز — fabric binned rather than cut, however recorded
  * @param weightPerPiece   fabric consumed per piece produced — the costing figure
+ * @param fabricIntakeId   the batch this run named as the one it was cut from, with
+ *                         {@code fabricColorId} the colour of it. Null when the
+ *                         fabric was drawn oldest-batch-first instead
  * @param fabricDraws      which batches a summary cut drew on; empty for a detailed one
+ * @param childWeight      what this cut's secondary runs have spent of its weight.
+ *                         Their fabric came off its own rolls, so it is charged here
+ *                         rather than taken from the batches again. Detail view only
  */
 public record CutDto(
         Long id,
@@ -45,9 +51,14 @@ public record CutDto(
         BigDecimal totalDefectWeight,
         BigDecimal defectPercentage,
         BigDecimal totalWasteWeight,
+        BigDecimal childWeight,
         CutEntryMode entryMode,
         Integer totalRolls,
         Integer reusedRolls,
+        Long fabricIntakeId,
+        LocalDate fabricIntakeDate,
+        Long fabricColorId,
+        String fabricColorNameAr,
         long derivedPieces,
         long totalAllocatedPieces,
         BigDecimal weightPerPiece,
@@ -61,7 +72,9 @@ public record CutDto(
     public static CutDto summary(
             Cut cut, int totalLayers, BigDecimal consumed, BigDecimal defect,
             BigDecimal waste, long allocated) {
-        return build(cut, totalLayers, consumed, defect, waste, 0L, allocated,
+        // Children are a detail-view figure: totalling them for a whole page
+        // would be a query per row.
+        return build(cut, totalLayers, consumed, defect, waste, BigDecimal.ZERO, 0L, allocated,
                 List.of(), List.of(), List.of(), List.of(), List.of());
     }
 
@@ -71,6 +84,7 @@ public record CutDto(
             BigDecimal consumed,
             BigDecimal defect,
             BigDecimal waste,
+            BigDecimal childWeight,
             List<CutModelDerivedDto> modelTotals,
             List<CutModelAllocationDto> modelAllocations,
             List<CutModelSizeDto> sizeBreakdown,
@@ -78,7 +92,7 @@ public record CutDto(
             List<CutFabricDrawDto> fabricDraws) {
         long derived = modelTotals.stream().mapToLong(CutModelDerivedDto::derivedPieces).sum();
         long allocated = modelAllocations.stream().mapToLong(CutModelAllocationDto::quantityAllocated).sum();
-        return build(cut, totalLayers, consumed, defect, waste, derived, allocated,
+        return build(cut, totalLayers, consumed, defect, waste, childWeight, derived, allocated,
                 modelTotals, modelAllocations, sizeBreakdown, rolls, fabricDraws);
     }
 
@@ -88,6 +102,7 @@ public record CutDto(
             BigDecimal consumed,
             BigDecimal defect,
             BigDecimal waste,
+            BigDecimal childWeight,
             long derivedPieces,
             long allocatedPieces,
             List<CutModelDerivedDto> modelTotals,
@@ -138,9 +153,14 @@ public record CutDto(
                 defectWeight,
                 defectPercentage,
                 waste == null ? BigDecimal.ZERO : waste,
+                childWeight == null ? BigDecimal.ZERO : childWeight,
                 cut.getEntryMode(),
                 cut.getTotalRolls(),
                 cut.getReusedRolls(),
+                cut.getFabricIntake() == null ? null : cut.getFabricIntake().getId(),
+                cut.getFabricIntake() == null ? null : cut.getFabricIntake().getIntakeDate(),
+                cut.getFabricColor() == null ? null : cut.getFabricColor().getId(),
+                cut.getFabricColor() == null ? null : cut.getFabricColor().getNameAr(),
                 derivedPieces,
                 allocatedPieces,
                 weightPerPiece,

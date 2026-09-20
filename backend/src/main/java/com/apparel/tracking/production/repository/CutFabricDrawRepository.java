@@ -1,5 +1,6 @@
 package com.apparel.tracking.production.repository;
 
+import java.math.BigDecimal;
 import java.util.List;
 
 import com.apparel.tracking.production.domain.CutFabricDraw;
@@ -40,6 +41,27 @@ public interface CutFabricDrawRepository extends JpaRepository<CutFabricDraw, Lo
      */
     @Query("select distinct d.cut.id, d.cut.totalLayers from CutFabricDraw d")
     List<Object[]> summaryLayersByCut();
+
+    /**
+     * What the runs cut from one colour of one batch have taken off it.
+     *
+     * <p>Read from the draws rather than kept as a counter on the colour row,
+     * because the breakdown is a soft record that can be rewritten after the
+     * fact — a stored figure would have to be corrected alongside it, and this
+     * sum cannot drift. {@code excludeCutId} leaves the run being edited out of
+     * its own headroom check.
+     */
+    @Query("""
+            select coalesce(sum(d.weightConsumed + d.wasteWeight), 0)
+            from CutFabricDraw d
+            where d.intake.id = :intakeId
+              and d.cut.fabricColor.id = :colorId
+              and (:excludeCutId is null or d.cut.id <> :excludeCutId)
+            """)
+    BigDecimal weightTakenOfColor(
+            @Param("intakeId") Long intakeId,
+            @Param("colorId") Long colorId,
+            @Param("excludeCutId") Long excludeCutId);
 
     /** Totals for a page of summary cuts: [cutId, consumed, waste, rolls]. */
     @Query("""

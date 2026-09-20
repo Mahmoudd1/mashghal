@@ -163,6 +163,11 @@ export interface Cut {
   /** Summary cuts only. */
   totalRolls: number | null;
   reusedRolls: number | null;
+  /** The batch this run named as the one it was cut from, and the colour of it. */
+  fabricIntakeId: number | null;
+  fabricIntakeDate: string | null;
+  fabricColorId: number | null;
+  fabricColorNameAr: string | null;
   derivedPieces: number;
   totalAllocatedPieces: number;
   weightPerPiece: number;
@@ -196,6 +201,9 @@ export interface CutSummaryPreviewRequest {
   wasteWeight: number;
   /** Rolls off a batch: the cut's rolls less any that were already open. */
   newRolls: number;
+  /** When the run names its batch, the preview is that batch and its headroom. */
+  fabricIntakeId?: number | null;
+  fabricColorId?: number | null;
 }
 
 export interface ModelCuts {
@@ -239,6 +247,13 @@ export interface CutRequest {
   totalWeight?: number | null;
   wasteWeight?: number | null;
   totalLayers?: number | null;
+  /**
+   * The batch this run was cut from, named outright instead of letting the fabric
+   * be drawn oldest-batch-first. Required for a derby run, which is asked for by
+   * colour off a purchase; optional for a secondary one.
+   */
+  fabricIntakeId?: number | null;
+  fabricColorId?: number | null;
 }
 
 export interface CutModelAllocationRequest {

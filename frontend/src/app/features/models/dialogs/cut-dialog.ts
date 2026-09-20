@@ -34,6 +34,7 @@ import {
   CutFabricDraw,
   CutModelSizeRequest,
   CutType,
+  FabricIntake,
 } from '../../../core/models/api.models';
 import { Observable, concat, last, of, switchMap, debounceTime } from 'rxjs';
 
@@ -117,7 +118,14 @@ export class CutDialog {
       { value: this.data.cut?.cutType ?? ('MAIN' as CutType), disabled: this.typeLocked },
       Validators.required,
     ],
-    parentMainCutId: [this.data.cut?.parentMainCutId ?? (null as number | null)],
+    // Fixed once the cut exists: its model and its marker came from that main
+    // cut, so re-pointing it would quietly reshape what the run yields.
+    parentMainCutId: [
+      {
+        value: this.data.cut?.parentMainCutId ?? (null as number | null),
+        disabled: this.typeLocked,
+      },
+    ],
     branchId: [this.data.cut?.branchId ?? (null as number | null), Validators.required],
     fabricTypeName: [this.data.cut?.fabricTypeNameAr ?? '', Validators.maxLength(128)],
     newTypeUnit: ['KG' as FabricUnit],
@@ -134,6 +142,11 @@ export class CutDialog {
     ],
     wasteWeight: [this.data.cut?.totalWasteWeight ?? (null as number | null)],
     totalLayers: [this.data.cut?.totalLayers ?? (null as number | null)],
+    // Which batch the run was cut from, and which colour of it. Derby always
+    // says; a secondary run says instead of being spent from its main cut.
+    fromNamedBatch: [this.data.cut?.fabricIntakeId != null],
+    fabricColorId: [this.data.cut?.fabricColorId ?? (null as number | null)],
+    fabricIntakeId: [this.data.cut?.fabricIntakeId ?? (null as number | null)],
     modelDescription: [this.data.cut?.modelDescription ?? '', Validators.maxLength(512)],
     // One entry per model this cut produces. The first is the cut's own model,
     // the one the create call names; the rest join through their marker rows.
@@ -156,6 +169,31 @@ export class CutDialog {
   });
 
   protected readonly isSummary = computed(() => this.entryMode() === 'SUMMARY');
+
+  private readonly fromNamedBatch = toSignal(this.form.controls.fromNamedBatch.valueChanges, {
+    initialValue: this.form.controls.fromNamedBatch.value,
+  });
+
+  protected readonly isDerby = computed(() => this.selectedType() === 'DERBY');
+  protected readonly isSecondary = computed(() => this.selectedType() === 'SECONDARY');
+
+  /**
+   * Whether this run says which batch its fabric came off, instead of letting it
+   * be drawn oldest-batch-first.
+   *
+   * <p>A derby run always does: derby is bought and asked for by colour, so the
+   * purchase it left is something the person knows and the system cannot guess.
+   * A secondary run may, when its fabric came off the shelf rather than out of
+   * the main cut it hangs off.
+   */
+  protected readonly namesBatch = computed(
+    () => this.isSummary() && (this.isDerby() || (this.isSecondary() && this.fromNamedBatch())),
+  );
+
+  /** A secondary run is spent from its main cut, not drawn from the batches. */
+  protected readonly absorbedByParent = computed(
+    () => this.isSummary() && this.isSecondary() && !this.fromNamedBatch(),
+  );
   protected readonly modeLocked = this.data.cut !== undefined;
 
   /** Which batches the totals would empty, and what stops them being saved. */
@@ -169,6 +207,24 @@ export class CutDialog {
   /** Only SECONDARY and DERBY cuts name a parent. */
   protected readonly needsParent = computed(() => this.selectedType() !== 'MAIN');
 
+  /**
+   * A secondary or derby run is cut out of a main run, and takes that run's model
+   * and marker with it — so neither is asked for here. Typing them again is
+   * transcription, and getting them wrong is how a child run ends up counted
+   * against a model its parent never cut.
+   */
+  protected readonly inheritsModel = this.needsParent;
+
+  /** The main cut a child run inherits from, once one is chosen. */
+  protected readonly parentCut = computed(() =>
+    this.parentOptions().find((cut) => cut.id === this.chosenParentId()),
+  );
+
+  /** The model that inheritance settles on, for the hint that replaces the form. */
+  protected readonly inheritedModelNumber = computed(
+    () => this.parentCut()?.primaryModelNumber ?? this.data.cut?.primaryModelNumber ?? null,
+  );
+
   /** A cut cannot be its own parent, and only MAIN cuts are eligible. */
   protected readonly parentOptions = computed(() =>
     this.production.mainCuts.value().content.filter((cut) => cut.id !== this.data.cut?.id),
@@ -178,7 +234,141 @@ export class CutDialog {
     if (!this.needsParent()) {
       this.form.controls.parentMainCutId.setValue(null);
     }
+    // Derby is written up from a purchase, by colour: a colour, a date and a
+    // weight. That is the totals form, so a derby run opens on it.
+    if (this.isDerby()) {
+      this.form.controls.entryMode.setValue('SUMMARY');
+    } else if (!this.needsParent()) {
+      this.form.controls.fromNamedBatch.setValue(false);
+    }
+    this.clearBatchChoice();
   }
+
+  private readonly chosenParentId = toSignal(this.form.controls.parentMainCutId.valueChanges, {
+    initialValue: this.form.controls.parentMainCutId.value,
+  });
+
+  /**
+   * Fills a secondary or derby run in from the main cut it hangs off.
+   *
+   * <p>It is the same run continued: the same fabric, usually at the same branch.
+   * Typing that again is transcription, and getting it wrong is how a child ends
+   * up laid out in a fabric its parent never used. The model and the marker are
+   * not filled in but inherited outright — see {@link inheritsModel}.
+   *
+   * <p>Only ever fills what is still blank, so a value already typed is never
+   * overwritten, and everything stays editable — a secondary run is sometimes
+   * sewn somewhere else.
+   */
+  protected onParentChange(): void {
+    const parent = this.parentCut();
+    if (!parent) {
+      return;
+    }
+
+    const patch: Record<string, unknown> = {};
+    if (this.form.controls.branchId.value === null) {
+      patch['branchId'] = parent.branchId;
+    }
+    if (this.form.controls.fabricTypeName.value.trim() === '') {
+      patch['fabricTypeName'] = parent.fabricTypeNameAr ?? '';
+    }
+    if (this.form.controls.cutLength.value === null) {
+      patch['cutLength'] = parent.cutLength;
+    }
+    this.form.patchValue(patch);
+  }
+
+  // --- the batch this run was cut from -------------------------------------
+
+  /** Batches of the right pool that still hold stock, for the two pickers. */
+  protected readonly batches = signal<FabricIntake[]>([]);
+
+  private readonly loadBatches = effect(() => {
+    const type = this.matchedType();
+    if (!this.namesBatch() || !type) {
+      this.batches.set([]);
+      return;
+    }
+    this.fabrics
+      .batchesInStock(type.id, this.isDerby())
+      .pipe(takeUntilDestroyed(this.destroyRef))
+      .subscribe((rows) => this.batches.set(rows));
+  });
+
+  private readonly chosenColorId = toSignal(this.form.controls.fabricColorId.valueChanges, {
+    initialValue: this.form.controls.fabricColorId.value,
+  });
+
+  private readonly chosenBatchId = toSignal(this.form.controls.fabricIntakeId.valueChanges, {
+    initialValue: this.form.controls.fabricIntakeId.value,
+  });
+
+  protected readonly chosenBatch = computed(() =>
+    this.batches().find((batch) => batch.id === this.chosenBatchId()),
+  );
+
+  /** Every colour the pool holds, gathered from the batches that hold it. */
+  protected readonly batchColors = computed(() => {
+    const byId = new Map<number, string>();
+    for (const batch of this.batches()) {
+      for (const row of batch.colorBreakdown) {
+        byId.set(row.colorId, row.colorNameAr);
+      }
+    }
+    return [...byId].map(([id, nameAr]) => ({ id, nameAr }));
+  });
+
+  /**
+   * The batches to choose a date from: the ones holding the colour, once a
+   * colour is picked. A batch whose colours were never written down is always
+   * offered — it has none to fail the filter with.
+   */
+  protected readonly batchOptions = computed(() => {
+    const colorId = this.chosenColorId();
+    return this.batches().filter(
+      (batch) =>
+        colorId === null ||
+        batch.colorBreakdown.length === 0 ||
+        batch.colorBreakdown.some((row) => row.colorId === colorId),
+    );
+  });
+
+  /** How much of the chosen colour the chosen batch says it holds. */
+  protected remainingOfColor(batch: FabricIntake): number | null {
+    const colorId = this.chosenColorId();
+    const row = batch.colorBreakdown.find((entry) => entry.colorId === colorId);
+    return row?.quantity ?? null;
+  }
+
+  protected onColorChange(): void {
+    const batch = this.chosenBatch();
+    const colorId = this.form.controls.fabricColorId.value;
+    // The batch on screen may not hold the colour just picked.
+    if (
+      batch &&
+      colorId !== null &&
+      batch.colorBreakdown.length > 0 &&
+      !batch.colorBreakdown.some((row) => row.colorId === colorId)
+    ) {
+      this.form.controls.fabricIntakeId.setValue(null);
+    }
+  }
+
+  private clearBatchChoice(): void {
+    this.form.patchValue({ fabricColorId: null, fabricIntakeId: null });
+  }
+
+  /** A run that draws from a named batch has to name one. */
+  protected readonly missingBatch = computed(
+    () => this.namesBatch() && this.chosenBatchId() === null,
+  );
+
+  /** And which colour of it, once the batch says which colours it holds. */
+  protected readonly missingBatchColor = computed(() => {
+    const batch = this.chosenBatch();
+    return batch !== undefined && batch.colorBreakdown.length > 0 && this.chosenColorId() === null;
+  });
 
   private readonly typedType = toSignal(this.form.controls.fabricTypeName.valueChanges, {
     initialValue: this.form.controls.fabricTypeName.value,
@@ -336,6 +526,13 @@ export class CutDialog {
   }
 
   protected blocked(): boolean {
+    if (this.missingBatch() || this.missingBatchColor()) {
+      return true;
+    }
+    // A child run inherits its models, so there is nothing here to disagree with.
+    if (this.inheritsModel()) {
+      return false;
+    }
     return (
       this.duplicateModel() ||
       this.modelsValue().some(
@@ -358,18 +555,34 @@ export class CutDialog {
       .subscribe(() => {
         const raw = this.form.getRawValue();
         const type = this.matchedType();
-        if (raw.entryMode !== 'SUMMARY' || !type || !raw.totalWeight || !raw.totalRolls) {
+        const names = this.namesBatch();
+        const fabricTypeId = this.chosenBatch()?.fabricTypeId ?? type?.id ?? null;
+        // Nothing to preview until the run says what it took, and from where: a
+        // named batch needs the batch, an inferred draw needs the rolls. A
+        // secondary run spent from its main cut takes nothing off the shelf at
+        // all — its fabric came out of the main cut's.
+        if (
+          raw.entryMode !== 'SUMMARY' ||
+          !raw.totalWeight ||
+          fabricTypeId === null ||
+          (names
+            ? raw.fabricIntakeId === null
+            : raw.cutType === 'SECONDARY' || !type || !raw.totalRolls)
+        ) {
           this.draw.set([]);
           this.drawError.set(null);
           return;
         }
         this.production
           .previewCutDraw({
-            fabricTypeId: type.id,
+            fabricTypeId,
             cutType: raw.cutType,
             totalWeight: raw.totalWeight,
-            wasteWeight: raw.wasteWeight ?? 0,
-            newRolls: raw.totalRolls - (raw.reusedRolls ?? 0),
+            wasteWeight: this.isDerby() ? 0 : (raw.wasteWeight ?? 0),
+            newRolls: this.isDerby() ? 0 : (raw.totalRolls ?? 0) - (raw.reusedRolls ?? 0),
+            ...(names
+              ? { fabricIntakeId: raw.fabricIntakeId, fabricColorId: raw.fabricColorId }
+              : {}),
           })
           .subscribe({
             next: (rows) => {
@@ -427,6 +640,12 @@ export class CutDialog {
     // makes it the cut's primary model. The others exist only as marker rows.
     const models = raw.models as unknown as ModelRowValue[];
     const first = models[0];
+    // A child run's model comes from the main cut it was cut out of, so it is
+    // left unsaid here rather than sent and ignored.
+    const inherits = raw.cutType !== 'MAIN';
+    const derby = raw.cutType === 'DERBY';
+    const names =
+      raw.entryMode === 'SUMMARY' && (derby || (raw.cutType === 'SECONDARY' && raw.fromNamedBatch));
     const request = {
       fabricTypeId,
       cutNumber: raw.cutNumber.trim(),
@@ -437,9 +656,9 @@ export class CutDialog {
       cutDate: toIsoDate(raw.cutDate),
       cutLength: raw.cutLength,
       modelDescription: raw.modelDescription.trim() || null,
-      modelNumber: toWesternDigits(first.modelNumber).trim() || null,
-      modelNameAr: first.modelNameAr.trim() || null,
-      modelSewingBranchId: first.sewingBranchId,
+      modelNumber: inherits ? null : toWesternDigits(first.modelNumber).trim() || null,
+      modelNameAr: inherits ? null : first.modelNameAr.trim() || null,
+      modelSewingBranchId: inherits ? null : first.sewingBranchId,
       labelAr: raw.labelAr.trim() || null,
       labelEn: raw.labelEn.trim() || null,
       note: raw.note.trim() || null,
@@ -448,11 +667,15 @@ export class CutDialog {
       // rolls, and sending both would describe the same fabric twice.
       ...(raw.entryMode === 'SUMMARY'
         ? {
-            totalRolls: raw.totalRolls,
-            reusedRolls: raw.reusedRolls ?? 0,
+            // A derby run lays out no marker — its ribbing is weighed, not
+            // counted — so it has neither rolls nor layers to state.
+            totalRolls: derby ? null : raw.totalRolls,
+            reusedRolls: derby ? null : (raw.reusedRolls ?? 0),
             totalWeight: raw.totalWeight,
-            wasteWeight: raw.wasteWeight ?? 0,
-            totalLayers: raw.totalLayers,
+            wasteWeight: derby ? 0 : (raw.wasteWeight ?? 0),
+            totalLayers: derby ? null : raw.totalLayers,
+            fabricIntakeId: names ? raw.fabricIntakeId : null,
+            fabricColorId: names ? raw.fabricColorId : null,
           }
         : {}),
     };
@@ -467,7 +690,8 @@ export class CutDialog {
       return;
     }
 
-    const marker = this.markerRequests(models);
+    // Nothing to record for a child run: its marker was copied from the main cut.
+    const marker = inherits ? [] : this.markerRequests(models);
     this.production
       .createCut(request)
       .pipe(

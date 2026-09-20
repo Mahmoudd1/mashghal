@@ -111,7 +111,7 @@ public class CutService {
             Object[] totals = rollTotals.get(cut.getId());
             // A summary cut has no rolls to sum, so it reports what it was told.
             int layers = cut.isSummary()
-                    ? cut.getTotalLayers()
+                    ? cut.layers()
                     : (totals == null ? 0 : ((Number) totals[0]).intValue());
             BigDecimal consumed = cut.isSummary()
                     ? cut.consumedWeight()
@@ -153,14 +153,22 @@ public class CutService {
         cut.setFabricType(resolveFabricType(request.fabricTypeId()));
         cut.setStatus(CutStatus.OPEN);
         applyEditableFields(cut, request);
-        cut.assignParent(resolveParent(request));
-        // Opening a cut is normally the moment its model comes into being.
-        cut.setPrimaryModel(resolvePrimaryModel(request));
+        Cut parent = resolveParent(request);
+        cut.assignParent(parent);
+        // Opening a cut is normally the moment its model comes into being — unless
+        // it hangs off a main cut, whose model it is cut out of and inherits.
+        cut.setPrimaryModel(parent == null ? resolvePrimaryModel(request) : parent.getPrimaryModel());
         applySummaryTotals(cut, request);
+        summaryService.assignSource(cut, request.fabricIntakeId(), request.fabricColorId());
 
         Cut saved = cuts.save(cut);
         // The fabric leaves the batches here; a detailed cut does it roll by roll.
         summaryService.apply(saved);
+        // A derby run takes the model but not the marker: it yields ribbing for
+        // that model, which is weighed rather than counted in pieces.
+        if (parent != null && saved.getCutType() == CutType.SECONDARY) {
+            inheritMarker(saved, parent);
+        }
         return detailOf(saved);
     }
 
@@ -187,6 +195,14 @@ public class CutService {
                     "A cut recorded from its totals cannot become a roll-by-roll cut, or the other way about");
         }
 
+        // The model and the marker came from the main cut, so re-pointing this one
+        // at a different main cut would quietly reshape what it yields.
+        if (cut.getParentMainCut() != null
+                && !cut.getParentMainCut().getId().equals(request.parentMainCutId())) {
+            throw new BusinessRuleException("cut_parent_immutable",
+                    "The main cut a secondary or derby run belongs to cannot change after it is created");
+        }
+
         // Put the fabric back before the new figures take it again, so an edit is
         // never a delta on top of a stale draw.
         summaryService.reverse(cut);
@@ -195,9 +211,11 @@ public class CutService {
         cut.setBranch(requireBranch(request.branchId()));
         cut.setFabricType(resolveFabricType(request.fabricTypeId()));
         applyEditableFields(cut, request);
-        cut.assignParent(resolveParent(request));
-        cut.setPrimaryModel(resolvePrimaryModel(request));
+        Cut parent = resolveParent(request);
+        cut.assignParent(parent);
+        cut.setPrimaryModel(parent == null ? resolvePrimaryModel(request) : parent.getPrimaryModel());
         applySummaryTotals(cut, request);
+        summaryService.assignSource(cut, request.fabricIntakeId(), request.fabricColorId());
 
         summaryService.apply(cut);
         return detailOf(cut);
@@ -270,14 +288,24 @@ public class CutService {
             return;
         }
 
-        if (request.totalRolls() == null || request.totalWeight() == null
-                || request.totalLayers() == null) {
+        if (request.totalWeight() == null) {
+            throw new BusinessRuleException("cut_summary_totals_required",
+                    "A cut recorded from its totals needs the weight it took off the shelf");
+        }
+
+        // A derby run lays out no marker: the ribbing it yields is weighed, not
+        // counted in pieces. Its whole record is a colour, a batch and a weight,
+        // so rolls and layers are asked for only of the runs that have them.
+        boolean laysOutPieces = cut.getCutType() != CutType.DERBY;
+        if (laysOutPieces && (request.totalRolls() == null || request.totalLayers() == null)) {
             throw new BusinessRuleException("cut_summary_totals_required",
                     "A cut recorded from its totals needs its rolls, weight and layers");
         }
 
-        int reused = request.reusedRolls() == null ? 0 : request.reusedRolls();
-        if (reused > request.totalRolls()) {
+        Integer reused = request.totalRolls() == null
+                ? null
+                : (request.reusedRolls() == null ? 0 : request.reusedRolls());
+        if (reused != null && reused > request.totalRolls()) {
             throw new BusinessRuleException("cut_summary_reused_exceeds_total",
                     "%d rolls were already open, which is more than the %d on the cut"
                             .formatted(reused, request.totalRolls()));
@@ -429,6 +457,34 @@ public class CutService {
 
         models.findById(modelId).ifPresent(model -> recomputeAllocations(cut, model));
         return get(cutId);
+    }
+
+    /**
+     * Copies a main cut's marker onto a secondary run cut out of it.
+     *
+     * <p>A secondary run is the same layout on the same table, for the same model:
+     * what differs is how many layers it lays, and the piece counts derive from
+     * that. So its model and its marker are inherited rather than typed a second
+     * time, which is also what stops a child run being recorded in sizes its
+     * parent never cut.
+     *
+     * <p>Copied rather than read through the parent, because a cut's marker is what
+     * its own pieces and reporting are built from; the parent link fixes where the
+     * rows came from, and it cannot change afterwards.
+     */
+    private void inheritMarker(Cut child, Cut parent) {
+        for (CutModelSize source : cutModelSizes.findByCut(parent.getId())) {
+            CutModelSize row = new CutModelSize();
+            row.setCut(child);
+            row.setModel(source.getModel());
+            row.setSize(source.getSize());
+            row.setPiecesPerLayer(source.getPiecesPerLayer());
+            row.setBranch(source.getBranch());
+            cutModelSizes.save(row);
+        }
+        // Pieces follow from that marker and this run's own layer count — which a
+        // detailed run does not have yet, so it derives them as its rolls arrive.
+        recomputeAllAllocations(child);
     }
 
     /**
@@ -693,7 +749,7 @@ public class CutService {
 
         // Derived from the rolls, or read off the cut — never both, so the same
         // fabric is never counted from two directions.
-        int layers = summary ? cut.getTotalLayers() : rollLines.stream()
+        int layers = summary ? cut.layers() : rollLines.stream()
                 .mapToInt(CutRoll::getLayers).sum();
         BigDecimal consumed = summary ? cut.consumedWeight() : rollLines.stream()
                 .map(CutRoll::getWeightConsumed)
@@ -722,6 +778,7 @@ public class CutService {
 
         return CutDto.detail(
                 cut, layers, consumed, defect, waste,
+                summaryService.chargedByChildren(cut.getId()),
                 derivedTotals(cut),
                 modelAllocationDtos(cut.getId()),
                 sizeRows,
@@ -743,7 +800,7 @@ public class CutService {
      */
     private int totalLayers(Cut cut) {
         return cut.isSummary()
-                ? cut.getTotalLayers()
+                ? cut.layers()
                 : cutRolls.findByCut(cut.getId()).stream().mapToInt(CutRoll::getLayers).sum();
     }
 

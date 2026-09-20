@@ -314,12 +314,23 @@ complete record rather than a draft.
   branch included. `cut.primary_model_id` records the link, so the size breakdown
   already knows which model it is for instead of asking again. A cut can still feed
   further models by naming a different number on a size row.
+- **A secondary or derby run inherits its parent's model and marker.** It is the same
+  layout on the same table, cut out of the same main run: only the layer count
+  differs, and the pieces derive from that. So neither is typed again — the marker
+  rows are copied from the main cut when the child is created, and the child's parent
+  is fixed from then on, because its model and its pieces came from there.
 - **Sizes belong to categories** (`اولادي`, `مقاسات محيرة`, `رجالي`, `مقاسات خاصة`) so
   reporting can ask about a whole range without naming every size.
 - **Every fabric type has two stock pools**: its regular stock and an optional
   *derby* (at most one, ever, topped up by further intakes). `DERBY` cuts consume the
   derby; `MAIN` and `SECONDARY` cuts consume regular stock. Crossing them is rejected
   in both directions.
+- **A run can name the batch it was cut from.** Derby is bought and asked for by
+  colour — "the navy from the 12/07 batch" — so a derby run is recorded as a colour, a
+  batch date and a weight, and the fabric comes off that batch alone rather than
+  oldest-first. It has no marker either: ribbing is weighed, not counted, so a derby
+  run states no rolls and no layers. A secondary run may name a batch the same way,
+  and is then spent from the shelf instead of from its main cut's weight.
 - **Reference data** (branches, pipeline stages) ships in migrations because the
   application's rules depend on it. Demo data is separate.
 - **Pipeline stages** are rows with a `sequence_no`, seeded with gaps (100/200/300/400)

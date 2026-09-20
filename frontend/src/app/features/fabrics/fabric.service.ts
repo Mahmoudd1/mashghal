@@ -1,6 +1,6 @@
 import { HttpClient, httpResource } from '@angular/common/http';
 import { Injectable, computed, inject, signal } from '@angular/core';
-import { Observable, tap } from 'rxjs';
+import { Observable, map, tap } from 'rxjs';
 
 import { API_BASE_URL } from '../../core/http/api.config';
 import {
@@ -106,6 +106,21 @@ export class FabricService {
       ? []
       : (this.types.value().find((type) => type.id === typeId)?.colors ?? []);
   });
+
+  /**
+   * Batches of one pool that still hold stock, for a run that names the batch it
+   * was cut from rather than letting the fabric be drawn oldest-first.
+   *
+   * <p>Fetched on demand rather than through {@link intakes}, whose filters
+   * belong to the fabrics page and would fight a dialog for them.
+   */
+  batchesInStock(fabricTypeId: number, derbyOnly: boolean): Observable<FabricIntake[]> {
+    return this.http
+      .get<Page<FabricIntake>>(`${this.baseUrl}/intakes`, {
+        params: { fabricTypeId, derbyOnly, inStockOnly: true, page: 0, size: 200 },
+      })
+      .pipe(map((page) => page.content));
+  }
 
   colorsOfType(fabricTypeId: number): FabricColor[] {
     return this.types.value().find((type) => type.id === fabricTypeId)?.colors ?? [];

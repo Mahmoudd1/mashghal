@@ -317,7 +317,14 @@
     "supplier_has_purchases": "A supplier with recorded purchases cannot be deleted — deactivate instead",
     "allocation_is_derived": "The branch split is derived from the sizes — change the sizes instead",
     "cut_roll_used_exceeds_roll": "The weight used exceeds the roll",
-    "model_required": "Name the model this size belongs to"
+    "model_required": "Name the model this size belongs to",
+    "cut_parent_immutable": "The main cut a secondary or derby run belongs to cannot change after creation",
+    "cut_derby_batch_required": "Say which derby batch, and which colour of it, this run was cut from",
+    "cut_batch_wrong_pool": "That batch is from the other pool — derby runs take derby batches, and the rest take regular stock",
+    "cut_batch_wrong_fabric": "That batch is a different fabric from the one this run lays out",
+    "cut_batch_color_required": "Say which colour of that batch this run was cut from",
+    "cut_batch_color_not_in_batch": "That batch holds no fabric of that colour",
+    "cut_batch_color_insufficient": "The batch does not hold enough of that colour"
   },
   "cut": {
     "add": "Add cut",
@@ -350,7 +357,7 @@
     "derbyCutHint": "This is a derby cut — it consumes from the derby pool only",
     "fabricType": "Fabric type",
     "cutLength": "Cut length",
-    "parentFillsHint": "Fabric, branch and model are filled in from the main cut; change them if they differ",
+    "parentFillsHint": "Fabric, branch and length are filled in from the main cut; the model and its sizes are inherited",
     "spentByChildren": "Spent by secondary runs",
     "ownUse": "This run's own use",
     "secondaryAbsorbedHint": "Cut from what the main run already took off the shelf, so nothing further is drawn from stock",
@@ -425,7 +432,17 @@
     "duplicateSize": "That size is already on this model",
     "sizesNeedModel": "Enter the model number before adding its sizes",
     "modelCreatedHint": "The model will be created with the cut",
-    "modelExistsHint": "Existing model — it will be linked"
+    "modelExistsHint": "Existing model — it will be linked",
+    "inheritsModelHint": "Model and size breakdown come from the main cut",
+    "entryDerbyHint": "Derby is written up from the purchase it came off: a colour, a batch date and the weight used",
+    "spentFromParent": "From the main cut",
+    "spentFromBatch": "From a batch",
+    "batchDate": "Batch date",
+    "batchDateHint": "The purchase this run was cut from",
+    "noBatchColors": "No colours recorded on these batches yet",
+    "batchRequired": "Choose the batch this run was cut from",
+    "batchColorRequired": "Choose which colour of that batch",
+    "derbyWeightHint": "Derby used by this run"
   },
   "report": {
     "tabs": {

@@ -16,6 +16,9 @@ import com.apparel.tracking.production.domain.CutType;
  * @param defectPercentage spoilage as a share of the fabric consumed, to two places
  * @param totalWasteWeight the عجز — fabric binned rather than cut, however recorded
  * @param weightPerPiece   fabric consumed per piece produced — the costing figure
+ * @param fabricIntakeId   the batch this run named as the one it was cut from, with
+ *                         {@code fabricColorId} the colour of it. Null when the
+ *                         fabric was drawn oldest-batch-first instead
  * @param fabricDraws      which batches a summary cut drew on; empty for a detailed one
  * @param childWeight      what this cut's secondary runs have spent of its weight.
  *                         Their fabric came off its own rolls, so it is charged here
@@ -52,6 +55,10 @@ public record CutDto(
         CutEntryMode entryMode,
         Integer totalRolls,
         Integer reusedRolls,
+        Long fabricIntakeId,
+        LocalDate fabricIntakeDate,
+        Long fabricColorId,
+        String fabricColorNameAr,
         long derivedPieces,
         long totalAllocatedPieces,
         BigDecimal weightPerPiece,
@@ -150,6 +157,10 @@ public record CutDto(
                 cut.getEntryMode(),
                 cut.getTotalRolls(),
                 cut.getReusedRolls(),
+                cut.getFabricIntake() == null ? null : cut.getFabricIntake().getId(),
+                cut.getFabricIntake() == null ? null : cut.getFabricIntake().getIntakeDate(),
+                cut.getFabricColor() == null ? null : cut.getFabricColor().getId(),
+                cut.getFabricColor() == null ? null : cut.getFabricColor().getNameAr(),
                 derivedPieces,
                 allocatedPieces,
                 weightPerPiece,

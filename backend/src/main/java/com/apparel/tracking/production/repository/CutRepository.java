@@ -25,6 +25,10 @@ public interface CutRepository extends JpaRepository<Cut, Long> {
      * <p>Their fabric came off rolls this cut drew, so it is spent from the same
      * total rather than taken from the batches again. {@code excludeCutId} leaves
      * the row being edited out of its own headroom check.
+     *
+     * <p>A secondary run that names the batch it was cut from is not counted: it
+     * took its fabric off the shelf itself, so charging it here as well would
+     * spend the main cut's weight on fabric it never held.
      */
     @Query("""
             select coalesce(sum(c.totalWeight), 0)
@@ -32,6 +36,7 @@ public interface CutRepository extends JpaRepository<Cut, Long> {
             where c.parentMainCut.id = :parentId
               and c.cutType = com.apparel.tracking.production.domain.CutType.SECONDARY
               and c.entryMode = com.apparel.tracking.production.domain.CutEntryMode.SUMMARY
+              and c.fabricIntake is null
               and (:excludeCutId is null or c.id <> :excludeCutId)
             """)
     BigDecimal secondaryWeightCharged(

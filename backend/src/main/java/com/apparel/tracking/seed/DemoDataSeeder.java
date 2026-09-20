@@ -310,11 +310,12 @@ public class DemoDataSeeder implements ApplicationRunner {
         // them — which is why neither names one of its own.
         ids.put("CUT-1S", cuts.create(new CutRequest(
                 "CUT-1S", CutType.SECONDARY, ids.get("CUT-1"), agamy, cottonType, null, null, null, null, null, today.minusDays(40),
-                BigDecimal.valueOf(2.0), "أكمام إضافية", "أكمام إضافية", "Extra sleeves", null,
+                // Description and label come from the main cut; the note is its own.
+                BigDecimal.valueOf(2.0), null, null, null, "أكمام إضافية",
                 null, null, null, null, null, null, null, null)).id());
         ids.put("CUT-2D", cuts.create(new CutRequest(
                 "CUT-2D", CutType.DERBY, ids.get("CUT-2"), smouha, denimType, null, null, null, null, null, today.minusDays(25),
-                BigDecimal.valueOf(3.5), "دربي الجينز", "دربي الجينز", "Denim derby", null,
+                BigDecimal.valueOf(3.5), null, null, null, "دربي الجينز",
                 null, null, null, null, null, null, null, null)).id());
 
         // Written up afterwards from a paper sheet: no roll detail, just the

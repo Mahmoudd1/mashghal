@@ -339,30 +339,6 @@
         }
       }
 
-      <!-- Rolls, layers and the عجز belong to a run that lays out a marker. A
-           derby run yields ribbing, which is weighed rather than counted. -->
-      @if (!isDerby()) {
-        <div class="color-entry-row">
-          <mat-form-field appearance="outline">
-            <mat-label>{{ 'cut.totalRolls' | translate }}</mat-label>
-            <input matInput type="number" min="1" step="1" formControlName="totalRolls" dir="ltr" />
-          </mat-form-field>
-
-          <mat-form-field appearance="outline">
-            <mat-label>{{ 'cut.reusedRolls' | translate }}</mat-label>
-            <input
-              matInput
-              type="number"
-              min="0"
-              step="1"
-              formControlName="reusedRolls"
-              dir="ltr"
-            />
-            <mat-hint>{{ 'cut.reusedRollsHint' | translate }}</mat-hint>
-          </mat-form-field>
-        </div>
-      }
-
       <div class="color-entry-row">
         <mat-form-field appearance="outline">
           <mat-label>{{ 'cut.totalWeight' | translate }}</mat-label>
@@ -395,6 +371,24 @@
         }
       </div>
 
+      <!-- How many rolls that weight came off, and how many of them somebody had
+           already opened. Next to the colour and the date, because that is how a
+           run cut from one purchase is read off the sheet. -->
+      <div class="color-entry-row">
+        <mat-form-field appearance="outline">
+          <mat-label>{{ 'cut.totalRolls' | translate }}</mat-label>
+          <input matInput type="number" min="1" step="1" formControlName="totalRolls" dir="ltr" />
+        </mat-form-field>
+
+        <mat-form-field appearance="outline">
+          <mat-label>{{ 'cut.reusedRolls' | translate }}</mat-label>
+          <input matInput type="number" min="0" step="1" formControlName="reusedRolls" dir="ltr" />
+          <mat-hint>{{ 'cut.reusedRollsHint' | translate }}</mat-hint>
+        </mat-form-field>
+      </div>
+
+      <!-- Layers are what pieces derive from, so only a run that lays out a
+           marker has them. A derby run yields ribbing: weighed, never counted. -->
       @if (!isDerby()) {
         <mat-form-field appearance="outline">
           <mat-label>{{ 'cut.totalLayers' | translate }}</mat-label>
@@ -433,15 +427,19 @@
       }
     }
 
-    <mat-form-field appearance="outline">
-      <mat-label>{{ 'cut.modelDescription' | translate }}</mat-label>
-      <textarea matInput rows="2" formControlName="modelDescription"></textarea>
-    </mat-form-field>
+    <!-- The description names the model and the label names the run, and a child
+         run belongs to its parent's. Only the note below is its own. -->
+    @if (!inheritsModel()) {
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'cut.modelDescription' | translate }}</mat-label>
+        <textarea matInput rows="2" formControlName="modelDescription"></textarea>
+      </mat-form-field>
 
-    <mat-form-field appearance="outline">
-      <mat-label>{{ 'cut.label' | translate }}</mat-label>
-      <input matInput formControlName="labelAr" />
-    </mat-form-field>
+      <mat-form-field appearance="outline">
+        <mat-label>{{ 'cut.label' | translate }}</mat-label>
+        <input matInput formControlName="labelAr" />
+      </mat-form-field>
+    }
 
     <mat-form-field appearance="outline">
       <mat-label>{{ 'common.notes' | translate }}</mat-label>

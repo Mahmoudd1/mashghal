@@ -155,6 +155,7 @@ public class CutService {
         applyEditableFields(cut, request);
         Cut parent = resolveParent(request);
         cut.assignParent(parent);
+        inheritHeaderFrom(cut, parent);
         // Opening a cut is normally the moment its model comes into being — unless
         // it hangs off a main cut, whose model it is cut out of and inherits.
         cut.setPrimaryModel(parent == null ? resolvePrimaryModel(request) : parent.getPrimaryModel());
@@ -213,6 +214,7 @@ public class CutService {
         applyEditableFields(cut, request);
         Cut parent = resolveParent(request);
         cut.assignParent(parent);
+        inheritHeaderFrom(cut, parent);
         cut.setPrimaryModel(parent == null ? resolvePrimaryModel(request) : parent.getPrimaryModel());
         applySummaryTotals(cut, request);
         summaryService.assignSource(cut, request.fabricIntakeId(), request.fabricColorId());
@@ -696,6 +698,23 @@ public class CutService {
         cut.setLabelAr(request.labelAr());
         cut.setLabelEn(request.labelEn());
         cut.setNote(request.note());
+    }
+
+    /**
+     * What a child run says about itself, taken from the run it was cut out of.
+     *
+     * <p>The description and the label describe the model being cut and the run it
+     * belongs to, and a secondary or derby run belongs to its parent's. Only the
+     * note stays its own: that is where "أكمام إضافية" goes, the one thing about a
+     * child run that is not true of the main one.
+     */
+    private void inheritHeaderFrom(Cut cut, Cut parent) {
+        if (parent == null) {
+            return;
+        }
+        cut.setModelDescription(parent.getModelDescription());
+        cut.setLabelAr(parent.getLabelAr());
+        cut.setLabelEn(parent.getLabelEn());
     }
 
     private Cut resolveParent(CutRequest request) {

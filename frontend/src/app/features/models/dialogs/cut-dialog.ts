@@ -579,7 +579,7 @@ export class CutDialog {
             cutType: raw.cutType,
             totalWeight: raw.totalWeight,
             wasteWeight: this.isDerby() ? 0 : (raw.wasteWeight ?? 0),
-            newRolls: this.isDerby() ? 0 : (raw.totalRolls ?? 0) - (raw.reusedRolls ?? 0),
+            newRolls: (raw.totalRolls ?? 0) - (raw.reusedRolls ?? 0),
             ...(names
               ? { fabricIntakeId: raw.fabricIntakeId, fabricColorId: raw.fabricColorId }
               : {}),
@@ -655,23 +655,25 @@ export class CutDialog {
 
       cutDate: toIsoDate(raw.cutDate),
       cutLength: raw.cutLength,
-      modelDescription: raw.modelDescription.trim() || null,
+      // Description and label describe the model and the run, and a child run
+      // belongs to its parent's — the server takes both from there.
+      modelDescription: inherits ? null : raw.modelDescription.trim() || null,
       modelNumber: inherits ? null : toWesternDigits(first.modelNumber).trim() || null,
       modelNameAr: inherits ? null : first.modelNameAr.trim() || null,
       modelSewingBranchId: inherits ? null : first.sewingBranchId,
-      labelAr: raw.labelAr.trim() || null,
-      labelEn: raw.labelEn.trim() || null,
+      labelAr: inherits ? null : raw.labelAr.trim() || null,
+      labelEn: inherits ? null : raw.labelEn.trim() || null,
       note: raw.note.trim() || null,
       entryMode: raw.entryMode,
       // Sent only in summary mode; a detailed cut derives all of this from its
       // rolls, and sending both would describe the same fabric twice.
       ...(raw.entryMode === 'SUMMARY'
         ? {
-            // A derby run lays out no marker — its ribbing is weighed, not
-            // counted — so it has neither rolls nor layers to state.
-            totalRolls: derby ? null : raw.totalRolls,
-            reusedRolls: derby ? null : (raw.reusedRolls ?? 0),
+            totalRolls: raw.totalRolls,
+            reusedRolls: raw.reusedRolls ?? 0,
             totalWeight: raw.totalWeight,
+            // A derby run lays out no marker — its ribbing is weighed, not
+            // counted — so it states no layers, and its عجز is not asked for.
             wasteWeight: derby ? 0 : (raw.wasteWeight ?? 0),
             totalLayers: derby ? null : raw.totalLayers,
             fabricIntakeId: names ? raw.fabricIntakeId : null,

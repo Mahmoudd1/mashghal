@@ -142,11 +142,10 @@ export class CutDialog {
     ],
     wasteWeight: [this.data.cut?.totalWasteWeight ?? (null as number | null)],
     totalLayers: [this.data.cut?.totalLayers ?? (null as number | null)],
-    // Which batch the run was cut from, and which colour of it. Derby always
-    // says; a secondary run says instead of being spent from its main cut.
-    fromNamedBatch: [this.data.cut?.fabricIntakeId != null],
+    // The colour the run was cut in. Derby always names one; a secondary run
+    // names one instead of being spent from its main cut.
+    fromNamedBatch: [this.data.cut?.fabricColorId != null],
     fabricColorId: [this.data.cut?.fabricColorId ?? (null as number | null)],
-    fabricIntakeId: [this.data.cut?.fabricIntakeId ?? (null as number | null)],
     modelDescription: [this.data.cut?.modelDescription ?? '', Validators.maxLength(512)],
     // One entry per model this cut produces. The first is the cut's own model,
     // the one the create call names; the rest join through their marker rows.
@@ -178,13 +177,12 @@ export class CutDialog {
   protected readonly isSecondary = computed(() => this.selectedType() === 'SECONDARY');
 
   /**
-   * Whether this run says which batch its fabric came off, instead of letting it
-   * be drawn oldest-batch-first.
+   * Whether this run says which colour it was cut in, narrowing the draw to the
+   * batches holding it.
    *
-   * <p>A derby run always does: derby is bought and asked for by colour, so the
-   * purchase it left is something the person knows and the system cannot guess.
-   * A secondary run may, when its fabric came off the shelf rather than out of
-   * the main cut it hangs off.
+   * <p>A derby run always does: derby is bought, kept and asked for by colour. A
+   * secondary run may, when its fabric came off the shelf rather than out of the
+   * main cut it hangs off.
    */
   protected readonly namesBatch = computed(
     () => this.isSummary() && (this.isDerby() || (this.isSecondary() && this.fromNamedBatch())),
@@ -279,9 +277,9 @@ export class CutDialog {
     this.form.patchValue(patch);
   }
 
-  // --- the batch this run was cut from -------------------------------------
+  // --- the colour this run was cut in --------------------------------------
 
-  /** Batches of the right pool that still hold stock, for the two pickers. */
+  /** Batches of the right pool that still hold stock, for the colour list. */
   protected readonly batches = signal<FabricIntake[]>([]);
 
   private readonly loadBatches = effect(() => {
@@ -300,75 +298,42 @@ export class CutDialog {
     initialValue: this.form.controls.fabricColorId.value,
   });
 
-  private readonly chosenBatchId = toSignal(this.form.controls.fabricIntakeId.valueChanges, {
-    initialValue: this.form.controls.fabricIntakeId.value,
-  });
-
-  protected readonly chosenBatch = computed(() =>
-    this.batches().find((batch) => batch.id === this.chosenBatchId()),
-  );
-
-  /** Every colour the pool holds, gathered from the batches that hold it. */
+  /**
+   * Every colour the pool actually holds, with how much of it is on the shelf.
+   *
+   * <p>Gathered from the batches rather than from the fabric type's colour list,
+   * so a colour nobody has in stock is not offered. The weight is what the
+   * breakdowns state, summed; a batch that lists the colour without a weight
+   * contributes nothing to the figure though it can still be drawn from, which
+   * is why it is shown as a hint and not as a limit.
+   */
   protected readonly batchColors = computed(() => {
-    const byId = new Map<number, string>();
+    const byId = new Map<number, { id: number; nameAr: string; remaining: number }>();
     for (const batch of this.batches()) {
       for (const row of batch.colorBreakdown) {
-        byId.set(row.colorId, row.colorNameAr);
+        const seen = byId.get(row.colorId);
+        if (seen) {
+          seen.remaining += row.quantity ?? 0;
+        } else {
+          byId.set(row.colorId, {
+            id: row.colorId,
+            nameAr: row.colorNameAr,
+            remaining: row.quantity ?? 0,
+          });
+        }
       }
     }
-    return [...byId].map(([id, nameAr]) => ({ id, nameAr }));
+    return [...byId.values()];
   });
-
-  /**
-   * The batches to choose a date from: the ones holding the colour, once a
-   * colour is picked. A batch whose colours were never written down is always
-   * offered — it has none to fail the filter with.
-   */
-  protected readonly batchOptions = computed(() => {
-    const colorId = this.chosenColorId();
-    return this.batches().filter(
-      (batch) =>
-        colorId === null ||
-        batch.colorBreakdown.length === 0 ||
-        batch.colorBreakdown.some((row) => row.colorId === colorId),
-    );
-  });
-
-  /** How much of the chosen colour the chosen batch says it holds. */
-  protected remainingOfColor(batch: FabricIntake): number | null {
-    const colorId = this.chosenColorId();
-    const row = batch.colorBreakdown.find((entry) => entry.colorId === colorId);
-    return row?.quantity ?? null;
-  }
-
-  protected onColorChange(): void {
-    const batch = this.chosenBatch();
-    const colorId = this.form.controls.fabricColorId.value;
-    // The batch on screen may not hold the colour just picked.
-    if (
-      batch &&
-      colorId !== null &&
-      batch.colorBreakdown.length > 0 &&
-      !batch.colorBreakdown.some((row) => row.colorId === colorId)
-    ) {
-      this.form.controls.fabricIntakeId.setValue(null);
-    }
-  }
 
   private clearBatchChoice(): void {
-    this.form.patchValue({ fabricColorId: null, fabricIntakeId: null });
+    this.form.controls.fabricColorId.setValue(null);
   }
 
-  /** A run that draws from a named batch has to name one. */
-  protected readonly missingBatch = computed(
-    () => this.namesBatch() && this.chosenBatchId() === null,
+  /** A run drawn down one colour's batches has to say which colour. */
+  protected readonly missingBatchColor = computed(
+    () => this.namesBatch() && this.chosenColorId() === null,
   );
-
-  /** And which colour of it, once the batch says which colours it holds. */
-  protected readonly missingBatchColor = computed(() => {
-    const batch = this.chosenBatch();
-    return batch !== undefined && batch.colorBreakdown.length > 0 && this.chosenColorId() === null;
-  });
 
   private readonly typedType = toSignal(this.form.controls.fabricTypeName.valueChanges, {
     initialValue: this.form.controls.fabricTypeName.value,
@@ -526,7 +491,7 @@ export class CutDialog {
   }
 
   protected blocked(): boolean {
-    if (this.missingBatch() || this.missingBatchColor()) {
+    if (this.missingBatchColor()) {
       return true;
     }
     // A child run inherits its models, so there is nothing here to disagree with.
@@ -556,18 +521,15 @@ export class CutDialog {
         const raw = this.form.getRawValue();
         const type = this.matchedType();
         const names = this.namesBatch();
-        const fabricTypeId = this.chosenBatch()?.fabricTypeId ?? type?.id ?? null;
         // Nothing to preview until the run says what it took, and from where: a
-        // named batch needs the batch, an inferred draw needs the rolls. A
+        // colour draw needs the colour, an ordinary one needs the rolls. A
         // secondary run spent from its main cut takes nothing off the shelf at
         // all — its fabric came out of the main cut's.
         if (
           raw.entryMode !== 'SUMMARY' ||
           !raw.totalWeight ||
-          fabricTypeId === null ||
-          (names
-            ? raw.fabricIntakeId === null
-            : raw.cutType === 'SECONDARY' || !type || !raw.totalRolls)
+          !type ||
+          (names ? raw.fabricColorId === null : raw.cutType === 'SECONDARY' || !raw.totalRolls)
         ) {
           this.draw.set([]);
           this.drawError.set(null);
@@ -575,14 +537,12 @@ export class CutDialog {
         }
         this.production
           .previewCutDraw({
-            fabricTypeId,
+            fabricTypeId: type.id,
             cutType: raw.cutType,
             totalWeight: raw.totalWeight,
             wasteWeight: this.isDerby() ? 0 : (raw.wasteWeight ?? 0),
             newRolls: (raw.totalRolls ?? 0) - (raw.reusedRolls ?? 0),
-            ...(names
-              ? { fabricIntakeId: raw.fabricIntakeId, fabricColorId: raw.fabricColorId }
-              : {}),
+            ...(names ? { fabricColorId: raw.fabricColorId } : {}),
           })
           .subscribe({
             next: (rows) => {
@@ -676,7 +636,6 @@ export class CutDialog {
             // counted — so it states no layers, and its عجز is not asked for.
             wasteWeight: derby ? 0 : (raw.wasteWeight ?? 0),
             totalLayers: derby ? null : raw.totalLayers,
-            fabricIntakeId: names ? raw.fabricIntakeId : null,
             fabricColorId: names ? raw.fabricColorId : null,
           }
         : {}),

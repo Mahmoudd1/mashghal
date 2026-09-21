@@ -3,7 +3,6 @@ package com.apparel.tracking.production.domain;
 import com.apparel.tracking.common.exception.BusinessRuleException;
 import com.apparel.tracking.common.model.BaseEntity;
 import com.apparel.tracking.fabric.domain.FabricColor;
-import com.apparel.tracking.fabric.domain.FabricIntake;
 import com.apparel.tracking.fabric.domain.FabricType;
 import com.apparel.tracking.reference.domain.Branch;
 
@@ -137,19 +136,15 @@ public class Cut extends BaseEntity {
     private Integer totalLayers;
 
     /**
-     * The batch this run was cut from, when it names one instead of letting the
-     * fabric be drawn oldest-batch-first.
+     * The colour this run was cut in.
      *
-     * <p>Derby is bought and asked for by colour — "the navy from the 12/07
-     * batch" — so which purchase it left is a fact about the run, not something
-     * to infer. A secondary run may name a batch too, and then it is spent from
-     * that batch instead of from the main cut it hangs off.
+     * <p>Derby is bought, kept and asked for by colour, so a derby run says which
+     * — and its weight is then drawn only from the batches holding that colour,
+     * oldest first, each giving at most what it holds of it. A secondary run may
+     * name a colour too, and is then drawn from the shelf that way instead of
+     * being spent from the main cut it hangs off. Null on a run that takes the
+     * fabric as it comes, which is every main run.
      */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "fabric_intake_id")
-    private FabricIntake fabricIntake;
-
-    /** Which colour of that batch. Null only when the batch has no breakdown. */
     @ManyToOne(fetch = FetchType.LAZY)
     @JoinColumn(name = "fabric_color_id")
     private FabricColor fabricColor;
@@ -158,9 +153,9 @@ public class Cut extends BaseEntity {
         return entryMode == CutEntryMode.SUMMARY;
     }
 
-    /** True when this run says which batch its fabric came off. */
-    public boolean drawsFromNamedBatch() {
-        return fabricIntake != null;
+    /** True when this run's fabric is drawn down one colour's batches only. */
+    public boolean drawsByColor() {
+        return fabricColor != null;
     }
 
     /**

@@ -160,7 +160,7 @@ public class CutService {
         // it hangs off a main cut, whose model it is cut out of and inherits.
         cut.setPrimaryModel(parent == null ? resolvePrimaryModel(request) : parent.getPrimaryModel());
         applySummaryTotals(cut, request);
-        summaryService.assignSource(cut, request.fabricIntakeId(), request.fabricColorId());
+        summaryService.assignSource(cut, request.fabricColorId());
 
         Cut saved = cuts.save(cut);
         // The fabric leaves the batches here; a detailed cut does it roll by roll.
@@ -217,7 +217,7 @@ public class CutService {
         inheritHeaderFrom(cut, parent);
         cut.setPrimaryModel(parent == null ? resolvePrimaryModel(request) : parent.getPrimaryModel());
         applySummaryTotals(cut, request);
-        summaryService.assignSource(cut, request.fabricIntakeId(), request.fabricColorId());
+        summaryService.assignSource(cut, request.fabricColorId());
 
         summaryService.apply(cut);
         return detailOf(cut);

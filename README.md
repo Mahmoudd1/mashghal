@@ -326,13 +326,18 @@ complete record rather than a draft.
   *derby* (at most one, ever, topped up by further intakes). `DERBY` cuts consume the
   derby; `MAIN` and `SECONDARY` cuts consume regular stock. Crossing them is rejected
   in both directions.
-- **A run can name the batch it was cut from.** Derby is bought and asked for by
-  colour — "the navy from the 12/07 batch" — so a derby run is recorded as a colour, a
-  batch date and a weight, and the fabric comes off that batch alone rather than
-  oldest-first. It has no marker either: ribbing is weighed, not counted, so a derby
-  run states no layers and no عجز — a colour, a batch, a weight and the rolls that
-  weight came off. A secondary run may name a batch the same way, and is then spent
-  from the shelf instead of from its main cut's weight.
+- **A run can be cut in one colour, and is then drawn down that colour's batches.**
+  Derby is bought, kept and asked for by colour, so a derby run is recorded as a
+  colour and a weight. The fabric comes off the batches holding that colour, oldest
+  first, spilling into the next as each runs out — the same walk a main run's fabric
+  takes, down a narrower shelf. A batch gives at most what its colour breakdown says
+  it holds of that colour, less what earlier runs in it already took; where the
+  breakdown names the colour without a weight, which it may, the batch's own
+  remainder is the only cap. A batch that never listed the colour is skipped: it
+  cannot be said to hold any. A derby run has no marker either — ribbing is weighed,
+  not counted — so it states no layers and no عجز, only the colour, the weight and
+  the rolls that weight came off. A secondary run may name a colour the same way, and
+  is then drawn from the shelf instead of being spent from its main cut's weight.
 - **Reference data** (branches, pipeline stages) ships in migrations because the
   application's rules depend on it. Demo data is separate.
 - **Pipeline stages** are rows with a `sequence_no`, seeded with gaps (100/200/300/400)

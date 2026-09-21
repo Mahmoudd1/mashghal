@@ -2,10 +2,10 @@ package com.apparel.tracking.production.domain;
 
 import com.apparel.tracking.common.exception.BusinessRuleException;
 import com.apparel.tracking.common.model.BaseEntity;
-import com.apparel.tracking.fabric.domain.FabricColor;
 import com.apparel.tracking.fabric.domain.FabricType;
 import com.apparel.tracking.reference.domain.Branch;
 
+import jakarta.persistence.CascadeType;
 import jakarta.persistence.Column;
 import jakarta.persistence.Entity;
 import jakarta.persistence.EnumType;
@@ -13,10 +13,16 @@ import jakarta.persistence.Enumerated;
 import jakarta.persistence.FetchType;
 import jakarta.persistence.JoinColumn;
 import jakarta.persistence.ManyToOne;
+import jakarta.persistence.OneToMany;
+import jakarta.persistence.OrderBy;
 import jakarta.persistence.Table;
 
 import java.math.BigDecimal;
 import java.time.LocalDate;
+import java.util.ArrayList;
+import java.util.List;
+
+import org.hibernate.annotations.BatchSize;
 
 import lombok.Getter;
 import lombok.NoArgsConstructor;
@@ -136,26 +142,27 @@ public class Cut extends BaseEntity {
     private Integer totalLayers;
 
     /**
-     * The colour this run was cut in.
+     * The colours this run was cut in, one line each.
      *
-     * <p>Derby is bought, kept and asked for by colour, so a derby run says which
-     * — and its weight is then drawn only from the batches holding that colour,
-     * oldest first, each giving at most what it holds of it. A secondary run may
-     * name a colour too, and is then drawn from the shelf that way instead of
-     * being spent from the main cut it hangs off. Null on a run that takes the
-     * fabric as it comes, which is every main run.
+     * <p>Derby is bought, kept and asked for by colour, so a derby run is written
+     * up colour by colour — and each colour's weight is drawn only from the
+     * batches holding it, oldest first. A secondary run may be written up the same
+     * way, and is then drawn from the shelf instead of being spent from the main
+     * cut it hangs off. Empty on a run that takes the fabric as it comes, which
+     * is every main run.
      */
-    @ManyToOne(fetch = FetchType.LAZY)
-    @JoinColumn(name = "fabric_color_id")
-    private FabricColor fabricColor;
+    @OneToMany(mappedBy = "cut", cascade = CascadeType.ALL, orphanRemoval = true)
+    @BatchSize(size = 50)
+    @OrderBy("id")
+    private List<CutColorLine> colorLines = new ArrayList<>();
 
     public boolean isSummary() {
         return entryMode == CutEntryMode.SUMMARY;
     }
 
-    /** True when this run's fabric is drawn down one colour's batches only. */
+    /** True when this run's fabric is drawn colour by colour. */
     public boolean drawsByColor() {
-        return fabricColor != null;
+        return !colorLines.isEmpty();
     }
 
     /**

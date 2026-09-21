@@ -118,22 +118,32 @@ public final class FabricAllocator {
      * @return waste per share, index for index
      */
     public static List<BigDecimal> splitWaste(List<Share> shares, BigDecimal waste) {
+        return splitByWeight(shares.stream().map(Share::weight).toList(), waste);
+    }
+
+    /**
+     * Splits {@code waste} across parts in proportion to their weights, the last
+     * part taking the rounding remainder so the pieces add back to exactly the
+     * figure entered. The same split a cut's عجز gets across its batches, and
+     * across its colours before that.
+     *
+     * @return waste per weight, index for index
+     */
+    public static List<BigDecimal> splitByWeight(List<BigDecimal> weights, BigDecimal waste) {
         List<BigDecimal> split = new ArrayList<>();
-        BigDecimal total = shares.stream()
-                .map(Share::weight)
-                .reduce(BigDecimal.ZERO, BigDecimal::add);
+        BigDecimal total = weights.stream().reduce(BigDecimal.ZERO, BigDecimal::add);
 
         if (waste.signum() == 0 || total.signum() == 0) {
-            shares.forEach(share -> split.add(BigDecimal.ZERO));
+            weights.forEach(weight -> split.add(BigDecimal.ZERO));
             return split;
         }
 
         BigDecimal allocated = BigDecimal.ZERO;
-        for (int index = 0; index < shares.size(); index++) {
-            boolean last = index == shares.size() - 1;
+        for (int index = 0; index < weights.size(); index++) {
+            boolean last = index == weights.size() - 1;
             BigDecimal part = last
                     ? waste.subtract(allocated)
-                    : waste.multiply(shares.get(index).weight())
+                    : waste.multiply(weights.get(index))
                             .divide(total, 3, java.math.RoundingMode.HALF_UP);
             split.add(part);
             allocated = allocated.add(part);

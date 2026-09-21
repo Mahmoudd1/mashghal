@@ -23,6 +23,7 @@ import com.apparel.tracking.production.domain.ModelRole;
 import com.apparel.tracking.production.dto.CutDto;
 import com.apparel.tracking.production.dto.CutModelAllocationDto;
 import com.apparel.tracking.production.dto.CutModelAllocationRequest;
+import com.apparel.tracking.production.dto.CutColorLineRequest;
 import com.apparel.tracking.production.dto.CutRequest;
 import com.apparel.tracking.production.dto.CutModelDerivedDto;
 import com.apparel.tracking.production.dto.CutModelSizeDto;
@@ -160,7 +161,7 @@ public class CutService {
         // it hangs off a main cut, whose model it is cut out of and inherits.
         cut.setPrimaryModel(parent == null ? resolvePrimaryModel(request) : parent.getPrimaryModel());
         applySummaryTotals(cut, request);
-        summaryService.assignSource(cut, request.fabricColorId());
+        summaryService.assignColorLines(cut, request.colorLinesOrEmpty());
 
         Cut saved = cuts.save(cut);
         // The fabric leaves the batches here; a detailed cut does it roll by roll.
@@ -217,7 +218,7 @@ public class CutService {
         inheritHeaderFrom(cut, parent);
         cut.setPrimaryModel(parent == null ? resolvePrimaryModel(request) : parent.getPrimaryModel());
         applySummaryTotals(cut, request);
-        summaryService.assignSource(cut, request.fabricColorId());
+        summaryService.assignColorLines(cut, request.colorLinesOrEmpty());
 
         summaryService.apply(cut);
         return detailOf(cut);
@@ -290,39 +291,52 @@ public class CutService {
             return;
         }
 
-        if (request.totalWeight() == null) {
+        // A run cut by colour is the sum of its colour lines: those are what was
+        // written up, and a separate total could only disagree with them.
+        List<CutColorLineRequest> lines = request.colorLinesOrEmpty();
+        boolean byColor = !lines.isEmpty();
+        BigDecimal totalWeight = byColor
+                ? lines.stream().map(CutColorLineRequest::weight).reduce(BigDecimal.ZERO, BigDecimal::add)
+                : request.totalWeight();
+        int lineRolls = lines.stream().mapToInt(CutColorLineRequest::rollsOrZero).sum();
+        Integer totalRolls = byColor ? (lineRolls == 0 ? null : lineRolls) : request.totalRolls();
+        Integer requestedReused = byColor
+                ? Integer.valueOf(lines.stream().mapToInt(CutColorLineRequest::reusedOrZero).sum())
+                : request.reusedRolls();
+
+        if (totalWeight == null) {
             throw new BusinessRuleException("cut_summary_totals_required",
                     "A cut recorded from its totals needs the weight it took off the shelf");
         }
 
         // A derby run lays out no marker: the ribbing it yields is weighed, not
-        // counted in pieces. Its whole record is a colour, a batch and a weight,
+        // counted in pieces. Its whole record is its colours and their weights,
         // so rolls and layers are asked for only of the runs that have them.
         boolean laysOutPieces = cut.getCutType() != CutType.DERBY;
-        if (laysOutPieces && (request.totalRolls() == null || request.totalLayers() == null)) {
+        if (laysOutPieces && (totalRolls == null || request.totalLayers() == null)) {
             throw new BusinessRuleException("cut_summary_totals_required",
                     "A cut recorded from its totals needs its rolls, weight and layers");
         }
 
-        Integer reused = request.totalRolls() == null
+        Integer reused = totalRolls == null
                 ? null
-                : (request.reusedRolls() == null ? 0 : request.reusedRolls());
-        if (reused != null && reused > request.totalRolls()) {
+                : (requestedReused == null ? 0 : requestedReused);
+        if (reused != null && reused > totalRolls) {
             throw new BusinessRuleException("cut_summary_reused_exceeds_total",
                     "%d rolls were already open, which is more than the %d on the cut"
-                            .formatted(reused, request.totalRolls()));
+                            .formatted(reused, totalRolls));
         }
 
         BigDecimal waste = request.wasteWeight() == null ? BigDecimal.ZERO : request.wasteWeight();
-        if (waste.compareTo(request.totalWeight()) > 0) {
+        if (waste.compareTo(totalWeight) > 0) {
             throw new BusinessRuleException("cut_summary_waste_exceeds_weight",
                     "The عجز of %s is more than the %s the cut took off the shelf"
-                            .formatted(waste, request.totalWeight()));
+                            .formatted(waste, totalWeight));
         }
 
-        cut.setTotalRolls(request.totalRolls());
+        cut.setTotalRolls(totalRolls);
         cut.setReusedRolls(reused);
-        cut.setTotalWeight(request.totalWeight());
+        cut.setTotalWeight(totalWeight);
         cut.setWasteWeight(waste);
         cut.setTotalLayers(request.totalLayers());
     }

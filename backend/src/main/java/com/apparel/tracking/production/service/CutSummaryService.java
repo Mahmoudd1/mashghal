@@ -2,7 +2,12 @@ package com.apparel.tracking.production.service;
 
 import java.math.BigDecimal;
 import java.util.ArrayList;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
+import java.util.Set;
 
 import com.apparel.tracking.common.exception.BusinessRuleException;
 import com.apparel.tracking.common.exception.NotFoundException;
@@ -10,8 +15,10 @@ import com.apparel.tracking.fabric.domain.FabricColor;
 import com.apparel.tracking.fabric.domain.FabricIntake;
 import com.apparel.tracking.fabric.domain.FabricIntakeColor;
 import com.apparel.tracking.production.domain.Cut;
+import com.apparel.tracking.production.domain.CutColorLine;
 import com.apparel.tracking.production.domain.CutFabricDraw;
 import com.apparel.tracking.production.domain.CutType;
+import com.apparel.tracking.production.dto.CutColorLineRequest;
 import com.apparel.tracking.production.dto.CutFabricDrawDto;
 import com.apparel.tracking.production.repository.CutFabricDrawRepository;
 import com.apparel.tracking.production.repository.CutRepository;
@@ -31,11 +38,10 @@ import org.springframework.transaction.annotation.Transactional;
  * it came from — and by then those batches hold something different, so the same
  * calculation would land somewhere else.
  *
- * <p>Inferring it is the fallback, not the rule: a run that knows which purchase
- * its fabric came off names the batch and the colour outright, and then the whole
- * weight comes off that one batch. Derby always does — it is bought and asked for
- * by colour, so guessing at the oldest batch would charge the wrong purchase — and
- * a secondary run may, instead of spending its main cut's weight.
+ * <p>A run cut by colour takes that walk once per colour, down a narrower shelf:
+ * only the batches holding the colour, each giving at most what it holds of it.
+ * Derby is always written up that way — it is bought, kept and asked for by
+ * colour — and a secondary run may be, instead of spending its main cut's weight.
  *
  * <p>Every mutation reverses its own previous effect before applying the new
  * one, exactly as the roll-by-roll path does, so an edit is never a delta on top
@@ -62,6 +68,16 @@ public class CutSummaryService {
     }
 
     /**
+     * One walk down the shelf: a colour and its weight, or the whole run when it
+     * is not cut by colour.
+     */
+    private record Line(FabricColor color, BigDecimal weight, int newRolls) {}
+
+    /** One batch's share of one line, worked out but not yet taken. */
+    private record Planned(
+            FabricIntake intake, FabricColor color, BigDecimal consumed, BigDecimal waste, int rolls) {}
+
+    /**
      * Works out the allocation without touching anything.
      *
      * <p>What the form shows while the totals are being typed, so the batches
@@ -72,35 +88,29 @@ public class CutSummaryService {
     @Transactional(readOnly = true)
     public List<CutFabricDrawDto> preview(
             Long fabricTypeId, CutType cutType, BigDecimal totalWeight, BigDecimal waste, int newRolls,
-            Long fabricColorId) {
+            List<CutColorLineRequest> colorLines) {
 
-        FabricColor color = fabricColorId == null
-                ? null
-                : colors.findById(fabricColorId)
-                        .orElseThrow(() -> NotFoundException.of("Fabric colour", fabricColorId));
+        List<Line> lines = colorLines.isEmpty()
+                ? List.of(new Line(null, totalWeight, newRolls))
+                : colorLines.stream()
+                        .map(request -> new Line(
+                                requireColor(request.fabricColorId()),
+                                request.weight(),
+                                request.rollsOrZero() - request.reusedOrZero()))
+                        .toList();
 
-        List<FabricAllocator.Share> shares = FabricAllocator.allocate(
-                headroomFor(fabricTypeId, cutType, color, null),
-                totalWeight,
-                newRolls,
-                shortageLabel(color));
-        List<BigDecimal> wasteSplit = FabricAllocator.splitWaste(shares, waste);
-
-        List<CutFabricDrawDto> rows = new ArrayList<>();
-        for (int index = 0; index < shares.size(); index++) {
-            FabricAllocator.Share share = shares.get(index);
-            BigDecimal shareWaste = wasteSplit.get(index);
-            rows.add(new CutFabricDrawDto(
-                    null,
-                    share.intake().getId(),
-                    share.intake().getIntakeDate(),
-                    share.intake().getSupplier() == null
-                            ? null : share.intake().getSupplier().getNameAr(),
-                    share.weight().subtract(shareWaste),
-                    shareWaste,
-                    share.rolls()));
-        }
-        return rows;
+        return plan(fabricTypeId, cutType, lines, waste, null).stream()
+                .map(planned -> new CutFabricDrawDto(
+                        null,
+                        planned.intake().getId(),
+                        planned.intake().getIntakeDate(),
+                        planned.intake().getSupplier() == null
+                                ? null : planned.intake().getSupplier().getNameAr(),
+                        planned.color() == null ? null : planned.color().getNameAr(),
+                        planned.consumed(),
+                        planned.waste(),
+                        planned.rolls()))
+                .toList();
     }
 
     /** Draws the cut's fabric off the batches and records where it came from. */
@@ -108,10 +118,10 @@ public class CutSummaryService {
         if (!cut.isSummary()) {
             return;
         }
-        // A secondary run with no colour of its own is cut from what the main run
-        // already took off the shelf — the remnants of its own rolls. Drawing
-        // again would take the same fabric from the batches twice, so this only
-        // checks that the main cut is big enough to have covered it.
+        // A secondary run not cut by colour is cut from what the main run already
+        // took off the shelf — the remnants of its own rolls. Drawing again would
+        // take the same fabric from the batches twice, so this only checks that
+        // the main cut is big enough to have covered it.
         if (cut.getCutType() == CutType.SECONDARY && !cut.drawsByColor()) {
             requireParentCovers(cut);
             return;
@@ -121,34 +131,32 @@ public class CutSummaryService {
                     "A cut recorded from its totals must say which fabric it laid out");
         }
 
-        List<FabricAllocator.Share> shares = FabricAllocator.allocate(
-                headroomFor(cut.getFabricType().getId(), cut.getCutType(),
-                        cut.getFabricColor(), cut.getId()),
-                cut.getTotalWeight(),
-                cut.newRolls(),
-                shortageLabel(cut.getFabricColor()));
-        List<BigDecimal> wasteSplit = FabricAllocator.splitWaste(shares, cut.getWasteWeight());
+        List<Line> lines = cut.drawsByColor()
+                ? cut.getColorLines().stream()
+                        .map(line -> new Line(line.getColor(), line.getWeight(), line.newRolls()))
+                        .toList()
+                : List.of(new Line(null, cut.getTotalWeight(), cut.newRolls()));
 
-        for (int index = 0; index < shares.size(); index++) {
-            FabricAllocator.Share share = shares.get(index);
-            FabricIntake batch = share.intake();
-            BigDecimal shareWaste = wasteSplit.get(index);
-            BigDecimal consumed = share.weight().subtract(shareWaste);
+        List<Planned> plan = plan(
+                cut.getFabricType().getId(), cut.getCutType(), lines, cut.getWasteWeight(), cut.getId());
 
-            if (consumed.signum() > 0) {
-                batch.consumeWeight(consumed);
+        for (Planned planned : plan) {
+            FabricIntake batch = planned.intake();
+            if (planned.consumed().signum() > 0) {
+                batch.consumeWeight(planned.consumed());
             }
-            if (shareWaste.signum() > 0) {
-                batch.wasteWeight(shareWaste);
+            if (planned.waste().signum() > 0) {
+                batch.wasteWeight(planned.waste());
             }
-            batch.consumeRolls(share.rolls());
+            batch.consumeRolls(planned.rolls());
 
             CutFabricDraw draw = new CutFabricDraw();
             draw.setCut(cut);
             draw.setIntake(batch);
-            draw.setWeightConsumed(consumed);
-            draw.setWasteWeight(shareWaste);
-            draw.setRollCount(share.rolls());
+            draw.setFabricColor(planned.color());
+            draw.setWeightConsumed(planned.consumed());
+            draw.setWasteWeight(planned.waste());
+            draw.setRollCount(planned.rolls());
             draws.save(draw);
         }
     }
@@ -175,29 +183,77 @@ public class CutSummaryService {
     }
 
     /**
-     * Records the colour this run was cut in.
+     * Records the colours this run was cut in, one line each.
      *
-     * <p>Derby is bought, kept and asked for by colour, so a derby run says which
-     * — and its weight then comes only off the batches holding that colour. A
-     * secondary run may name a colour too, and is then drawn from the shelf that
-     * way instead of being spent from the main cut it hangs off.
+     * <p>Derby is bought, kept and asked for by colour, so a derby run is written
+     * up colour by colour. A secondary run may be, and is then drawn from the
+     * shelf that way instead of being spent from the main cut it hangs off.
+     *
+     * <p>A line already on the cut is kept and changed in place rather than
+     * replaced, so an edit never deletes and re-inserts the same colour — which
+     * the one-line-per-colour key would refuse, since inserts are flushed first.
      */
-    public void assignSource(Cut cut, Long fabricColorId) {
-        if (!cut.isSummary() || fabricColorId == null) {
+    public void assignColorLines(Cut cut, List<CutColorLineRequest> requests) {
+        if (!cut.isSummary() || requests.isEmpty()) {
             if (cut.isSummary() && cut.getCutType() == CutType.DERBY) {
                 throw new BusinessRuleException("cut_derby_color_required",
                         "Say which colour of derby this run was cut in");
             }
-            cut.setFabricColor(null);
+            cut.getColorLines().clear();
             return;
         }
 
-        FabricColor color = colors.findById(fabricColorId)
-                .orElseThrow(() -> NotFoundException.of("Fabric colour", fabricColorId));
+        Set<Long> seen = new HashSet<>();
+        for (CutColorLineRequest request : requests) {
+            if (!seen.add(request.fabricColorId())) {
+                throw new BusinessRuleException("cut_color_duplicate",
+                        "Each colour goes on one line; that colour is on two");
+            }
+        }
 
-        // A colour belongs to a fabric type, so naming one names the fabric with
-        // it: a run that never said which fabric it laid out learns it here
-        // rather than being asked the same thing twice.
+        Map<Long, CutColorLine> existing = new LinkedHashMap<>();
+        for (CutColorLine line : cut.getColorLines()) {
+            existing.put(line.getColor().getId(), line);
+        }
+
+        List<CutColorLine> lines = new ArrayList<>();
+        for (CutColorLineRequest request : requests) {
+            FabricColor color = requireColor(request.fabricColorId());
+            requireSameFabric(cut, color);
+
+            if (request.reusedOrZero() > request.rollsOrZero()) {
+                throw new BusinessRuleException("cut_summary_reused_exceeds_total",
+                        "%d rolls of %s were already open, which is more than the %d on the line"
+                                .formatted(request.reusedOrZero(), color.getNameAr(),
+                                        request.rollsOrZero()));
+            }
+
+            CutColorLine line = existing.remove(color.getId());
+            if (line == null) {
+                line = new CutColorLine();
+                line.setCut(cut);
+                line.setColor(color);
+            }
+            line.setWeight(request.weight());
+            line.setTotalRolls(request.rollsOrZero());
+            line.setReusedRolls(request.reusedOrZero());
+            lines.add(line);
+        }
+
+        cut.getColorLines().retainAll(lines);
+        for (CutColorLine line : lines) {
+            if (!cut.getColorLines().contains(line)) {
+                cut.getColorLines().add(line);
+            }
+        }
+    }
+
+    /**
+     * A colour belongs to a fabric type, so naming one names the fabric with it:
+     * a run that never said which fabric it laid out learns it here rather than
+     * being asked the same thing twice.
+     */
+    private void requireSameFabric(Cut cut, FabricColor color) {
         if (cut.getFabricType() == null) {
             cut.setFabricType(color.getFabricType());
         } else if (!cut.getFabricType().getId().equals(color.getFabricType().getId())) {
@@ -205,12 +261,64 @@ public class CutSummaryService {
                     "%s is a colour of %s, not of the fabric this run lays out"
                             .formatted(color.getNameAr(), color.getFabricType().getNameAr()));
         }
-
-        cut.setFabricColor(color);
     }
 
     /**
-     * What each batch may give this run, oldest first.
+     * Works out which batch gives what to each line, without taking anything.
+     *
+     * <p>The run's عجز is split across its lines by weight, then each line's
+     * share across the batches it lands on. Lines are walked in turn, and what an
+     * earlier line has planned off a batch is taken out of that batch's headroom
+     * before the next looks at it — two colours can come off one purchase, and
+     * the second must see what the first left.
+     */
+    private List<Planned> plan(
+            Long fabricTypeId, CutType cutType, List<Line> lines, BigDecimal waste, Long excludeCutId) {
+
+        BigDecimal runWaste = waste == null ? BigDecimal.ZERO : waste;
+        List<BigDecimal> lineWaste = FabricAllocator.splitByWeight(
+                lines.stream().map(Line::weight).toList(), runWaste);
+
+        Map<Long, BigDecimal> weightPlanned = new HashMap<>();
+        Map<Long, Integer> rollsPlanned = new HashMap<>();
+        List<Planned> planned = new ArrayList<>();
+
+        for (int index = 0; index < lines.size(); index++) {
+            Line line = lines.get(index);
+
+            List<FabricAllocator.Headroom> headroom =
+                    headroomFor(fabricTypeId, cutType, line.color(), excludeCutId).stream()
+                            .map(room -> {
+                                Long id = room.intake().getId();
+                                return new FabricAllocator.Headroom(
+                                        room.intake(),
+                                        room.weight()
+                                                .subtract(weightPlanned.getOrDefault(id, BigDecimal.ZERO))
+                                                .max(BigDecimal.ZERO),
+                                        Math.max(0, room.rolls() - rollsPlanned.getOrDefault(id, 0)));
+                            })
+                            .toList();
+
+            List<FabricAllocator.Share> shares = FabricAllocator.allocate(
+                    headroom, line.weight(), line.newRolls(), shortageLabel(line.color()));
+            List<BigDecimal> shareWaste = FabricAllocator.splitWaste(shares, lineWaste.get(index));
+
+            for (int share = 0; share < shares.size(); share++) {
+                FabricAllocator.Share taken = shares.get(share);
+                BigDecimal binned = shareWaste.get(share);
+                planned.add(new Planned(
+                        taken.intake(), line.color(), taken.weight().subtract(binned), binned, taken.rolls()));
+
+                Long id = taken.intake().getId();
+                weightPlanned.merge(id, taken.weight(), BigDecimal::add);
+                rollsPlanned.merge(id, taken.rolls(), Integer::sum);
+            }
+        }
+        return planned;
+    }
+
+    /**
+     * What each batch may give one line, oldest first.
      *
      * <p>Without a colour that is everything each batch has left. With one, only
      * the batches that say they hold the colour are walked at all — a batch that
@@ -252,6 +360,11 @@ public class CutSummaryService {
     /** What came up short, for the message: the colour if there is one. */
     private String shortageLabel(FabricColor color) {
         return color == null ? "this fabric" : color.getNameAr();
+    }
+
+    private FabricColor requireColor(Long fabricColorId) {
+        return colors.findById(fabricColorId)
+                .orElseThrow(() -> NotFoundException.of("Fabric colour", fabricColorId));
     }
 
     /**

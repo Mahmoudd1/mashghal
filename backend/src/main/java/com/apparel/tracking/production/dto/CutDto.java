@@ -16,9 +16,9 @@ import com.apparel.tracking.production.domain.CutType;
  * @param defectPercentage spoilage as a share of the fabric consumed, to two places
  * @param totalWasteWeight the عجز — fabric binned rather than cut, however recorded
  * @param weightPerPiece   fabric consumed per piece produced — the costing figure
- * @param fabricColorId    the colour this run was cut in, its weight drawn from the
- *                         batches holding it. Null on a run that took the fabric
- *                         as it came
+ * @param colorLines       the colours this run was cut in, one line each, every one
+ *                         drawn down its own colour's batches. Empty on a run that
+ *                         took the fabric as it came
  * @param fabricDraws      which batches a summary cut drew on; empty for a detailed one
  * @param childWeight      what this cut's secondary runs have spent of its weight.
  *                         Their fabric came off its own rolls, so it is charged here
@@ -55,8 +55,7 @@ public record CutDto(
         CutEntryMode entryMode,
         Integer totalRolls,
         Integer reusedRolls,
-        Long fabricColorId,
-        String fabricColorNameAr,
+        List<CutColorLineDto> colorLines,
         long derivedPieces,
         long totalAllocatedPieces,
         BigDecimal weightPerPiece,
@@ -155,8 +154,9 @@ public record CutDto(
                 cut.getEntryMode(),
                 cut.getTotalRolls(),
                 cut.getReusedRolls(),
-                cut.getFabricColor() == null ? null : cut.getFabricColor().getId(),
-                cut.getFabricColor() == null ? null : cut.getFabricColor().getNameAr(),
+                // On the list view too: editing a run from there has to show the
+                // lines it was written up with, or saving would drop them.
+                cut.getColorLines().stream().map(CutColorLineDto::from).toList(),
                 derivedPieces,
                 allocatedPieces,
                 weightPerPiece,

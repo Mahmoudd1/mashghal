@@ -36,7 +36,7 @@ public interface CutRepository extends JpaRepository<Cut, Long> {
             where c.parentMainCut.id = :parentId
               and c.cutType = com.apparel.tracking.production.domain.CutType.SECONDARY
               and c.entryMode = com.apparel.tracking.production.domain.CutEntryMode.SUMMARY
-              and c.fabricColor is null
+              and c.colorLines is empty
               and (:excludeCutId is null or c.id <> :excludeCutId)
             """)
     BigDecimal secondaryWeightCharged(

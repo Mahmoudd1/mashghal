@@ -55,7 +55,7 @@ public interface CutFabricDrawRepository extends JpaRepository<CutFabricDraw, Lo
             select coalesce(sum(d.weightConsumed + d.wasteWeight), 0)
             from CutFabricDraw d
             where d.intake.id = :intakeId
-              and d.cut.fabricColor.id = :colorId
+              and d.fabricColor.id = :colorId
               and (:excludeCutId is null or d.cut.id <> :excludeCutId)
             """)
     BigDecimal weightTakenOfColor(

@@ -23,9 +23,11 @@ import com.apparel.tracking.fabric.domain.FabricType;
 import com.apparel.tracking.fabric.repository.FabricColorRepository;
 import com.apparel.tracking.fabric.repository.FabricIntakeRepository;
 import com.apparel.tracking.production.domain.Cut;
+import com.apparel.tracking.production.domain.CutColorLine;
 import com.apparel.tracking.production.domain.CutEntryMode;
 import com.apparel.tracking.production.domain.CutFabricDraw;
 import com.apparel.tracking.production.domain.CutType;
+import com.apparel.tracking.production.dto.CutColorLineRequest;
 import com.apparel.tracking.production.repository.CutFabricDrawRepository;
 import com.apparel.tracking.production.repository.CutRepository;
 
@@ -54,6 +56,7 @@ class CutSummaryServiceTest {
     private static final Long CHILD_ID = 11L;
     private static final Long BATCH_ID = 77L;
     private static final Long NAVY_ID = 5L;
+    private static final Long BLACK_ID = 6L;
 
     @Mock private CutFabricDrawRepository draws;
     @Mock private FabricIntakeRepository intakes;
@@ -72,6 +75,7 @@ class CutSummaryServiceTest {
         cotton.setNameAr("قطن");
 
         when(colors.findById(NAVY_ID)).thenReturn(java.util.Optional.of(navy()));
+        when(colors.findById(BLACK_ID)).thenReturn(java.util.Optional.of(black()));
 
         when(cuts.secondaryWeightCharged(any(), any())).thenReturn(BigDecimal.ZERO);
         when(intakes.openBatchesOldestFirst(eq(TYPE_ID), any(Boolean.class)))
@@ -100,11 +104,34 @@ class CutSummaryServiceTest {
         return color;
     }
 
-    /** A derby run of {@code weight}, cut in navy. */
+    private FabricColor black() {
+        FabricColor color = new FabricColor();
+        color.setId(BLACK_ID);
+        color.setNameAr("أسود");
+        color.setFabricType(cotton);
+        return color;
+    }
+
+    /** A colour line of {@code weight}, with no rolls counted. */
+    private CutColorLine line(Cut run, FabricColor color, String weight) {
+        CutColorLine line = new CutColorLine();
+        line.setCut(run);
+        line.setColor(color);
+        line.setWeight(new BigDecimal(weight));
+        return line;
+    }
+
+    /** A derby run of {@code weight}, all of it navy. */
     private Cut derbyRun(String weight) {
         Cut run = cut(CHILD_ID, CutType.DERBY, weight, mainCut("200.000"));
-        run.setFabricColor(navy());
+        run.setTotalRolls(null);
+        run.setReusedRolls(null);
+        run.getColorLines().add(line(run, navy(), weight));
         return run;
+    }
+
+    private CutColorLineRequest navyLine(String weight) {
+        return new CutColorLineRequest(NAVY_ID, new BigDecimal(weight), null, null);
     }
 
     private FabricIntakeColor colorRow(FabricIntake batch, FabricColor color, String quantity) {
@@ -286,7 +313,7 @@ class CutSummaryServiceTest {
         batch.setDerby(null);
         when(intakes.openBatchesOldestFirst(eq(TYPE_ID), eq(false))).thenReturn(List.of(batch));
         Cut run = cut(CHILD_ID, CutType.SECONDARY, "50.000", mainCut("200.000"));
-        run.setFabricColor(navy());
+        run.getColorLines().add(line(run, navy(), "50.000"));
 
         service.apply(run);
 
@@ -300,7 +327,7 @@ class CutSummaryServiceTest {
     void refusesADerbyRunThatNamesNoColour() {
         Cut run = cut(CHILD_ID, CutType.DERBY, "7.500", mainCut("200.000"));
 
-        assertThatThrownBy(() -> service.assignSource(run, null))
+        assertThatThrownBy(() -> service.assignColorLines(run, List.of()))
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining("which colour");
     }
@@ -313,7 +340,7 @@ class CutSummaryServiceTest {
         Cut run = cut(CHILD_ID, CutType.DERBY, "7.500", mainCut("200.000"));
         run.setFabricType(linen);
 
-        assertThatThrownBy(() -> service.assignSource(run, NAVY_ID))
+        assertThatThrownBy(() -> service.assignColorLines(run, List.of(navyLine("7.500"))))
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining("not of the fabric");
     }
@@ -323,10 +350,76 @@ class CutSummaryServiceTest {
         Cut run = cut(CHILD_ID, CutType.DERBY, "7.500", mainCut("200.000"));
         run.setFabricType(null);
 
-        service.assignSource(run, NAVY_ID);
+        service.assignColorLines(run, List.of(navyLine("7.500")));
 
         assertThat(run.getFabricType()).isEqualTo(cotton);
-        assertThat(run.getFabricColor().getId()).isEqualTo(NAVY_ID);
+        assertThat(run.getColorLines()).singleElement()
+                .satisfies(line -> assertThat(line.getColor().getId()).isEqualTo(NAVY_ID));
+    }
+
+    @Test
+    void walksEachColourDownItsOwnBatches() {
+        // One purchase holding both: 5 kg navy and 6 kg black. The older batch
+        // has only navy; the newer one both.
+        FabricIntake older = derbyBatch(BATCH_ID, "40.000", "4.000");
+        FabricIntake newer = derbyBatch(78L, "40.000", "5.000");
+        newer.getColorBreakdown().add(colorRow(newer, black(), "6.000"));
+        when(intakes.openBatchesOldestFirst(eq(TYPE_ID), eq(true)))
+                .thenReturn(List.of(older, newer));
+
+        Cut run = derbyRun("9.000");
+        run.getColorLines().clear();
+        run.getColorLines().add(line(run, navy(), "6.000"));
+        run.getColorLines().add(line(run, black(), "3.000"));
+
+        service.apply(run);
+
+        // Navy: 4 off the older batch, 2 spilling into the newer. Black only
+        // exists on the newer, so all 3 come from there.
+        assertThat(older.getConsumedQuantity()).isEqualByComparingTo("4.000");
+        assertThat(newer.getConsumedQuantity()).isEqualByComparingTo("5.000");
+        verify(draws, times(3)).save(any(CutFabricDraw.class));
+    }
+
+    @Test
+    void letsASecondColourSeeWhatTheFirstTookOffASharedBatch() {
+        // 10 kg left on the batch in all, the breakdown silent on the weights: if
+        // navy takes 7, black can only have the 3 that remain.
+        FabricIntake shared = derbyBatch(BATCH_ID, "10.000", null);
+        shared.getColorBreakdown().add(colorRow(shared, black(), null));
+        when(intakes.openBatchesOldestFirst(eq(TYPE_ID), eq(true))).thenReturn(List.of(shared));
+
+        Cut run = derbyRun("11.000");
+        run.getColorLines().clear();
+        run.getColorLines().add(line(run, navy(), "7.000"));
+        run.getColorLines().add(line(run, black(), "4.000"));
+
+        assertThatThrownBy(() -> service.apply(run))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("أسود");
+    }
+
+    @Test
+    void refusesTheSameColourOnTwoLines() {
+        Cut run = cut(CHILD_ID, CutType.DERBY, "7.500", mainCut("200.000"));
+
+        assertThatThrownBy(() -> service.assignColorLines(
+                        run, List.of(navyLine("3.000"), navyLine("4.500"))))
+                .isInstanceOf(BusinessRuleException.class)
+                .hasMessageContaining("one line");
+    }
+
+    @Test
+    void keepsALineInPlaceWhenAnEditChangesItsWeight() {
+        Cut run = derbyRun("7.500");
+        CutColorLine original = run.getColorLines().get(0);
+
+        service.assignColorLines(run, List.of(navyLine("9.000")));
+
+        // Changed where it stands, not deleted and re-added: the one-line-per-
+        // colour key would refuse the insert, which is flushed before the delete.
+        assertThat(run.getColorLines()).containsExactly(original);
+        assertThat(original.getWeight()).isEqualByComparingTo("9.000");
     }
 
     @Test

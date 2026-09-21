@@ -8,13 +8,15 @@ import com.apparel.tracking.production.domain.CutFabricDraw;
 /**
  * One batch's share of a summary cut.
  *
- * @param id null on a preview, which is worked out but not yet written down
+ * @param id          null on a preview, which is worked out but not yet written down
+ * @param colorNameAr the colour this share was for, on a run cut by colour
  */
 public record CutFabricDrawDto(
         Long id,
         Long fabricIntakeId,
         LocalDate intakeDate,
         String supplierNameAr,
+        String colorNameAr,
         BigDecimal weightConsumed,
         BigDecimal wasteWeight,
         int rollCount) {
@@ -26,6 +28,7 @@ public record CutFabricDrawDto(
                 intake.getId(),
                 intake.getIntakeDate(),
                 intake.getSupplier() == null ? null : intake.getSupplier().getNameAr(),
+                draw.getFabricColor() == null ? null : draw.getFabricColor().getNameAr(),
                 draw.getWeightConsumed(),
                 draw.getWasteWeight(),
                 draw.getRollCount());

@@ -94,7 +94,7 @@ public class CutController {
                 request.totalWeight(),
                 request.wasteWeight() == null ? BigDecimal.ZERO : request.wasteWeight(),
                 request.newRolls(),
-                request.fabricColorId());
+                request.colorLinesOrEmpty());
     }
 
     @PostMapping("/{id}/close")

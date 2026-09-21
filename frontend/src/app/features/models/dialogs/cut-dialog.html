@@ -284,7 +284,11 @@
       <!-- A secondary run's fabric either came out of the main cut's rolls, or it
            came off the shelf itself — and then it says which batch. -->
       @if (isSecondary()) {
-        <mat-button-toggle-group formControlName="fromNamedBatch" class="source-toggle">
+        <mat-button-toggle-group
+          formControlName="fromNamedBatch"
+          class="source-toggle"
+          (change)="onSourceChange()"
+        >
           <mat-button-toggle [value]="false">{{
             'cut.spentFromParent' | translate
           }}</mat-button-toggle>
@@ -294,52 +298,103 @@
         </mat-button-toggle-group>
       }
 
-      <!-- The colour is all the run says about where its fabric came from: the
-           batches holding it are walked oldest first, exactly as a main run's
-           fabric is, and the preview below shows which ones it landed on. -->
       @if (namesBatch()) {
-        <mat-form-field appearance="outline">
-          <mat-label>{{ 'fabric.color' | translate }}</mat-label>
-          <mat-select formControlName="fabricColorId">
-            @for (color of batchColors(); track color.id) {
-              <mat-option [value]="color.id">
-                {{ color.nameAr }}
-                @if (color.remaining > 0) {
-                  <span class="option-hint">{{ color.remaining | number: '1.0-3' }}</span>
-                }
-              </mat-option>
-            }
-          </mat-select>
-          <mat-hint>
-            {{
-              (batchColors().length === 0 ? 'cut.noBatchColors' : 'cut.colorDrawHint') | translate
-            }}
-          </mat-hint>
-        </mat-form-field>
+        <!-- One line per colour: each is walked down the batches holding that
+             colour, oldest first, exactly as a main run's fabric is, and the
+             preview below shows where every line landed. -->
+        <div formArrayName="colorLines" class="size-rows">
+          @for (line of colorLineRows; track $index; let lineIndex = $index) {
+            <div class="size-row" [formGroupName]="lineIndex">
+              <mat-form-field appearance="outline" subscriptSizing="dynamic" class="grow">
+                <mat-label>{{ 'fabric.color' | translate }}</mat-label>
+                <mat-select formControlName="fabricColorId">
+                  @for (color of batchColors(); track color.id) {
+                    <mat-option [value]="color.id">
+                      {{ color.nameAr }}
+                      @if (color.remaining > 0) {
+                        <span class="option-hint">{{ color.remaining | number: '1.0-3' }}</span>
+                      }
+                    </mat-option>
+                  }
+                </mat-select>
+              </mat-form-field>
 
-        @if (missingBatchColor()) {
-          <p class="soft-warning soft-warning-strong">
-            <mat-icon inline>warning</mat-icon>
-            {{ 'cut.batchColorRequired' | translate }}
+              <mat-form-field appearance="outline" subscriptSizing="dynamic" class="narrow">
+                <mat-label>{{ 'cut.totalWeight' | translate }}</mat-label>
+                <input
+                  matInput
+                  type="number"
+                  step="0.001"
+                  min="0"
+                  formControlName="weight"
+                  dir="ltr"
+                />
+              </mat-form-field>
+
+              <mat-form-field appearance="outline" subscriptSizing="dynamic" class="narrow">
+                <mat-label>{{ 'cut.rolls' | translate }}</mat-label>
+                <input
+                  matInput
+                  type="number"
+                  min="0"
+                  step="1"
+                  formControlName="totalRolls"
+                  dir="ltr"
+                />
+              </mat-form-field>
+
+              <mat-form-field appearance="outline" subscriptSizing="dynamic" class="narrow">
+                <mat-label>{{ 'cut.reusedRolls' | translate }}</mat-label>
+                <input
+                  matInput
+                  type="number"
+                  min="0"
+                  step="1"
+                  formControlName="reusedRolls"
+                  dir="ltr"
+                />
+              </mat-form-field>
+
+              <button
+                mat-icon-button
+                type="button"
+                [matTooltip]="'common.delete' | translate"
+                (click)="removeColorLine(lineIndex)"
+              >
+                <mat-icon>close</mat-icon>
+              </button>
+            </div>
+          }
+        </div>
+
+        <button mat-button type="button" (click)="addColorLine()">
+          <mat-icon>add</mat-icon>
+          <span>{{ 'cut.addColorLine' | translate }}</span>
+        </button>
+
+        @if (colorLineRows.length > 1) {
+          <p class="action-hint numeric">
+            {{ 'cut.colorLinesTotal' | translate }}: {{ colorTotals().weight | number: '1.0-3' }} —
+            {{ colorTotals().rolls }}
+            {{ 'cut.rolls' | translate }}
           </p>
         }
-      }
 
-      <div class="color-entry-row">
-        <mat-form-field appearance="outline">
-          <mat-label>{{ 'cut.totalWeight' | translate }}</mat-label>
-          <input
-            matInput
-            type="number"
-            step="0.001"
-            min="0"
-            formControlName="totalWeight"
-            dir="ltr"
-          />
-          <mat-hint>
-            {{ (isDerby() ? 'cut.derbyWeightHint' : 'cut.totalWeightHint') | translate }}
-          </mat-hint>
-        </mat-form-field>
+        <p class="muted">
+          {{ (batchColors().length === 0 ? 'cut.noBatchColors' : 'cut.colorDrawHint') | translate }}
+        </p>
+
+        @if (duplicateColor()) {
+          <p class="soft-warning soft-warning-strong">
+            <mat-icon inline>warning</mat-icon>
+            {{ 'cut.duplicateColor' | translate }}
+          </p>
+        } @else if (incompleteColorLines()) {
+          <p class="soft-warning soft-warning-strong">
+            <mat-icon inline>warning</mat-icon>
+            {{ 'cut.colorLinesIncomplete' | translate }}
+          </p>
+        }
 
         @if (!isDerby()) {
           <mat-form-field appearance="outline">
@@ -355,23 +410,55 @@
             <mat-hint>{{ 'cut.shortageHint' | translate }}</mat-hint>
           </mat-form-field>
         }
-      </div>
+      } @else {
+        <div class="color-entry-row">
+          <mat-form-field appearance="outline">
+            <mat-label>{{ 'cut.totalWeight' | translate }}</mat-label>
+            <input
+              matInput
+              type="number"
+              step="0.001"
+              min="0"
+              formControlName="totalWeight"
+              dir="ltr"
+            />
+            <mat-hint>{{ 'cut.totalWeightHint' | translate }}</mat-hint>
+          </mat-form-field>
 
-      <!-- How many rolls that weight came off, and how many of them somebody had
-           already opened. Next to the colour and the date, because that is how a
-           run cut from one purchase is read off the sheet. -->
-      <div class="color-entry-row">
-        <mat-form-field appearance="outline">
-          <mat-label>{{ 'cut.totalRolls' | translate }}</mat-label>
-          <input matInput type="number" min="1" step="1" formControlName="totalRolls" dir="ltr" />
-        </mat-form-field>
+          <mat-form-field appearance="outline">
+            <mat-label>{{ 'cut.shortage' | translate }}</mat-label>
+            <input
+              matInput
+              type="number"
+              step="0.001"
+              min="0"
+              formControlName="wasteWeight"
+              dir="ltr"
+            />
+            <mat-hint>{{ 'cut.shortageHint' | translate }}</mat-hint>
+          </mat-form-field>
+        </div>
 
-        <mat-form-field appearance="outline">
-          <mat-label>{{ 'cut.reusedRolls' | translate }}</mat-label>
-          <input matInput type="number" min="0" step="1" formControlName="reusedRolls" dir="ltr" />
-          <mat-hint>{{ 'cut.reusedRollsHint' | translate }}</mat-hint>
-        </mat-form-field>
-      </div>
+        <div class="color-entry-row">
+          <mat-form-field appearance="outline">
+            <mat-label>{{ 'cut.totalRolls' | translate }}</mat-label>
+            <input matInput type="number" min="1" step="1" formControlName="totalRolls" dir="ltr" />
+          </mat-form-field>
+
+          <mat-form-field appearance="outline">
+            <mat-label>{{ 'cut.reusedRolls' | translate }}</mat-label>
+            <input
+              matInput
+              type="number"
+              min="0"
+              step="1"
+              formControlName="reusedRolls"
+              dir="ltr"
+            />
+            <mat-hint>{{ 'cut.reusedRollsHint' | translate }}</mat-hint>
+          </mat-form-field>
+        </div>
+      }
 
       <!-- Layers are what pieces derive from, so only a run that lays out a
            marker has them. A derby run yields ribbing: weighed, never counted. -->
@@ -400,6 +487,9 @@
           @for (row of draw(); track row.fabricIntakeId) {
             <p class="draw-row">
               <span class="numeric">{{ row.intakeDate | date: 'dd/MM/yyyy' }}</span>
+              @if (row.colorNameAr) {
+                <span>{{ row.colorNameAr }}</span>
+              }
               <span>{{ row.supplierNameAr ?? ('supplier.unknown' | translate) }}</span>
               <span class="spacer"></span>
               <span class="numeric">{{ row.weightConsumed | number: '1.0-3' }}</span>

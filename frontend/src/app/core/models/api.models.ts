@@ -163,9 +163,8 @@ export interface Cut {
   /** Summary cuts only. */
   totalRolls: number | null;
   reusedRolls: number | null;
-  /** The colour this run was cut in; its weight came off the batches holding it. */
-  fabricColorId: number | null;
-  fabricColorNameAr: string | null;
+  /** The colours this run was cut in, one line each. Empty on a main run. */
+  colorLines: CutColorLine[];
   derivedPieces: number;
   totalAllocatedPieces: number;
   weightPerPiece: number;
@@ -179,6 +178,25 @@ export interface Cut {
 
 export type CutEntryMode = 'DETAILED' | 'SUMMARY';
 
+/** One colour of a run cut by colour, drawn down that colour's batches oldest first. */
+export interface CutColorLine {
+  id: number;
+  fabricColorId: number;
+  colorNameAr: string;
+  /** Fabric of this colour off the shelf, its share of the عجز included. */
+  weight: number;
+  totalRolls: number;
+  /** Of those rolls, how many an earlier run had already opened. */
+  reusedRolls: number;
+}
+
+export interface CutColorLineRequest {
+  fabricColorId: number;
+  weight: number;
+  totalRolls: number;
+  reusedRolls: number;
+}
+
 /** One batch's share of a summary cut, worked out oldest-batch-first. */
 export interface CutFabricDraw {
   /** Null on a preview, which is calculated but not yet saved. */
@@ -186,6 +204,8 @@ export interface CutFabricDraw {
   fabricIntakeId: number;
   intakeDate: string;
   supplierNameAr: string | null;
+  /** The colour this share was for, on a run cut by colour. */
+  colorNameAr: string | null;
   weightConsumed: number;
   wasteWeight: number;
   rollCount: number;
@@ -199,8 +219,8 @@ export interface CutSummaryPreviewRequest {
   wasteWeight: number;
   /** Rolls off a batch: the cut's rolls less any that were already open. */
   newRolls: number;
-  /** When the run names a colour, the preview walks only the batches holding it. */
-  fabricColorId?: number | null;
+  /** When the run is cut by colour, each line walks its own colour's batches. */
+  colorLines?: CutColorLineRequest[];
 }
 
 export interface ModelCuts {
@@ -245,11 +265,12 @@ export interface CutRequest {
   wasteWeight?: number | null;
   totalLayers?: number | null;
   /**
-   * The colour this run was cut in. Its weight is drawn from the batches holding
-   * that colour, oldest first. Required for a derby run, which is bought and asked
-   * for by colour; optional for a secondary one.
+   * The colours this run was cut in, one line each, every one drawn down its own
+   * colour's batches oldest first. The run's weight and rolls are then the lines'
+   * sums. Required for a derby run, which is bought and asked for by colour;
+   * optional for a secondary one.
    */
-  fabricColorId?: number | null;
+  colorLines?: CutColorLineRequest[];
 }
 
 export interface CutModelAllocationRequest {

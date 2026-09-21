@@ -320,7 +320,8 @@
     "model_required": "Name the model this size belongs to",
     "cut_parent_immutable": "The main cut a secondary or derby run belongs to cannot change after creation",
     "cut_derby_color_required": "Say which colour of derby this run was cut in",
-    "cut_color_wrong_fabric": "That colour belongs to a different fabric than the one this run lays out"
+    "cut_color_wrong_fabric": "That colour belongs to a different fabric than the one this run lays out",
+    "cut_color_duplicate": "Each colour goes on one line; that colour is on two"
   },
   "cut": {
     "add": "Add cut",
@@ -430,13 +431,16 @@
     "modelCreatedHint": "The model will be created with the cut",
     "modelExistsHint": "Existing model — it will be linked",
     "inheritsModelHint": "Model, size breakdown, description and label come from the main cut",
-    "entryDerbyHint": "Derby is written up by colour: the colour and the weight used, drawn from the batches holding it, oldest first",
+    "entryDerbyHint": "Derby is written up by colour: each colour and the weight used, drawn from the batches holding it, oldest first",
     "spentFromParent": "From the main cut",
     "spentFromBatch": "By colour, from stock",
     "noBatchColors": "No colours in stock for this fabric yet",
-    "batchColorRequired": "Choose the colour this run was cut in",
     "derbyWeightHint": "Derby used by this run",
-    "colorDrawHint": "Taken from the batches holding this colour, oldest first"
+    "colorDrawHint": "Each colour is taken from the batches holding it, oldest first",
+    "addColorLine": "Add colour",
+    "colorLinesTotal": "Total",
+    "colorLinesIncomplete": "Every colour line needs a colour and a weight",
+    "duplicateColor": "That colour is already on another line"
   },
   "report": {
     "tabs": {

@@ -33,6 +33,7 @@ import {
   CutEntryMode,
   CutFabricDraw,
   CutModelSizeRequest,
+  CutColorLineRequest,
   CutType,
   FabricIntake,
 } from '../../../core/models/api.models';
@@ -43,6 +44,14 @@ import { ProductionService } from '../production.service';
 import { NumericFieldDirective } from '../../../shared/numerals/numeric-field.directive';
 import { ArabicDigitsDirective } from '../../../shared/numerals/arabic-digits.directive';
 import { toWesternDigits } from '../../../shared/numerals/arabic-numerals';
+
+/** One colour of a run cut by colour: the colour, its weight, its rolls. */
+interface ColorLineValue {
+  fabricColorId: number | null;
+  weight: number | null;
+  totalRolls: number | null;
+  reusedRolls: number | null;
+}
 
 /** One model row's value: who it is, and what a layer yields of it. */
 interface ModelRowValue {
@@ -142,10 +151,19 @@ export class CutDialog {
     ],
     wasteWeight: [this.data.cut?.totalWasteWeight ?? (null as number | null)],
     totalLayers: [this.data.cut?.totalLayers ?? (null as number | null)],
-    // The colour the run was cut in. Derby always names one; a secondary run
-    // names one instead of being spent from its main cut.
-    fromNamedBatch: [this.data.cut?.fabricColorId != null],
-    fabricColorId: [this.data.cut?.fabricColorId ?? (null as number | null)],
+    // The colours the run was cut in, one line each. Derby is always written up
+    // this way; a secondary run is when it is not spent from its main cut.
+    fromNamedBatch: [(this.data.cut?.colorLines.length ?? 0) > 0],
+    colorLines: this.formBuilder.array(
+      (this.data.cut?.colorLines ?? []).map((line) =>
+        this.colorLineGroup({
+          fabricColorId: line.fabricColorId,
+          weight: line.weight,
+          totalRolls: line.totalRolls,
+          reusedRolls: line.reusedRolls,
+        }),
+      ),
+    ),
     modelDescription: [this.data.cut?.modelDescription ?? '', Validators.maxLength(512)],
     // One entry per model this cut produces. The first is the cut's own model,
     // the one the create call names; the rest join through their marker rows.
@@ -294,9 +312,51 @@ export class CutDialog {
       .subscribe((rows) => this.batches.set(rows));
   });
 
-  private readonly chosenColorId = toSignal(this.form.controls.fabricColorId.valueChanges, {
-    initialValue: this.form.controls.fabricColorId.value,
+  private readonly colorLinesRaw = toSignal(this.form.controls.colorLines.valueChanges, {
+    initialValue: this.form.controls.colorLines.getRawValue(),
   });
+
+  /** An untyped FormArray erases the line shape; this puts it back in one place. */
+  private readonly colorLinesValue = computed(() => this.colorLinesRaw() as ColorLineValue[]);
+
+  protected get colorLineRows(): FormGroup[] {
+    return this.form.controls.colorLines.controls as FormGroup[];
+  }
+
+  /** What the lines add up to: the run's weight and rolls, as saved. */
+  protected readonly colorTotals = computed(() =>
+    this.colorLinesValue().reduce(
+      (sum, line) => ({
+        weight: sum.weight + (line.weight ?? 0),
+        rolls: sum.rolls + (line.totalRolls ?? 0),
+      }),
+      { weight: 0, rolls: 0 },
+    ),
+  );
+
+  /** Switching a secondary run to "by colour" opens its first line. */
+  protected onSourceChange(): void {
+    if (this.form.controls.fromNamedBatch.value && this.colorLineRows.length === 0) {
+      this.addColorLine();
+    }
+  }
+
+  protected addColorLine(): void {
+    this.form.controls.colorLines.push(this.colorLineGroup());
+  }
+
+  protected removeColorLine(index: number): void {
+    this.form.controls.colorLines.removeAt(index);
+  }
+
+  private colorLineGroup(value?: ColorLineValue): FormGroup {
+    return this.formBuilder.group({
+      fabricColorId: [value?.fabricColorId ?? (null as number | null)],
+      weight: [value?.weight ?? (null as number | null)],
+      totalRolls: [value?.totalRolls ?? (null as number | null)],
+      reusedRolls: [value?.reusedRolls ?? (null as number | null)],
+    });
+  }
 
   /**
    * Every colour the pool actually holds, with how much of it is on the shelf.
@@ -326,14 +386,37 @@ export class CutDialog {
     return [...byId.values()];
   });
 
+  /** Back to a single empty line, the way a run cut by colour starts. */
   private clearBatchChoice(): void {
-    this.form.controls.fabricColorId.setValue(null);
+    this.form.controls.colorLines.clear();
+    this.form.controls.colorLines.push(this.colorLineGroup());
   }
 
-  /** A run drawn down one colour's batches has to say which colour. */
-  protected readonly missingBatchColor = computed(
-    () => this.namesBatch() && this.chosenColorId() === null,
+  /** Every line needs its colour and its weight, and there has to be one. */
+  protected readonly incompleteColorLines = computed(
+    () =>
+      this.namesBatch() &&
+      (this.colorLinesValue().length === 0 ||
+        this.colorLinesValue().some((line) => line.fabricColorId === null || !line.weight)),
   );
+
+  /** The same colour on two lines: one line typed twice. */
+  protected readonly duplicateColor = computed(() => {
+    const ids = this.colorLinesValue()
+      .map((line) => line.fabricColorId)
+      .filter((id) => id !== null);
+    return new Set(ids).size !== ids.length;
+  });
+
+  /** The lines as the API takes them, once they are complete. */
+  private colorLineRequests(): CutColorLineRequest[] {
+    return this.colorLinesValue().map((line) => ({
+      fabricColorId: line.fabricColorId!,
+      weight: line.weight!,
+      totalRolls: line.totalRolls ?? 0,
+      reusedRolls: line.reusedRolls ?? 0,
+    }));
+  }
 
   private readonly typedType = toSignal(this.form.controls.fabricTypeName.valueChanges, {
     initialValue: this.form.controls.fabricTypeName.value,
@@ -491,7 +574,7 @@ export class CutDialog {
   }
 
   protected blocked(): boolean {
-    if (this.missingBatchColor()) {
+    if (this.incompleteColorLines() || (this.namesBatch() && this.duplicateColor())) {
       return true;
     }
     // A child run inherits its models, so there is nothing here to disagree with.
@@ -521,15 +604,19 @@ export class CutDialog {
         const raw = this.form.getRawValue();
         const type = this.matchedType();
         const names = this.namesBatch();
-        // Nothing to preview until the run says what it took, and from where: a
-        // colour draw needs the colour, an ordinary one needs the rolls. A
-        // secondary run spent from its main cut takes nothing off the shelf at
-        // all — its fabric came out of the main cut's.
+        const lines = names ? this.colorLineRequests() : [];
+        const totalWeight = names ? this.colorTotals().weight : (raw.totalWeight ?? 0);
+        // Nothing to preview until the run says what it took, and from where:
+        // colour lines need their colours and weights, an ordinary draw its
+        // rolls. A secondary run spent from its main cut takes nothing off the
+        // shelf at all — its fabric came out of the main cut's.
         if (
           raw.entryMode !== 'SUMMARY' ||
-          !raw.totalWeight ||
+          !totalWeight ||
           !type ||
-          (names ? raw.fabricColorId === null : raw.cutType === 'SECONDARY' || !raw.totalRolls)
+          (names
+            ? this.incompleteColorLines() || this.duplicateColor()
+            : raw.cutType === 'SECONDARY' || !raw.totalRolls)
         ) {
           this.draw.set([]);
           this.drawError.set(null);
@@ -539,10 +626,12 @@ export class CutDialog {
           .previewCutDraw({
             fabricTypeId: type.id,
             cutType: raw.cutType,
-            totalWeight: raw.totalWeight,
+            totalWeight,
             wasteWeight: this.isDerby() ? 0 : (raw.wasteWeight ?? 0),
-            newRolls: (raw.totalRolls ?? 0) - (raw.reusedRolls ?? 0),
-            ...(names ? { fabricColorId: raw.fabricColorId } : {}),
+            newRolls: names
+              ? lines.reduce((sum, line) => sum + line.totalRolls - line.reusedRolls, 0)
+              : (raw.totalRolls ?? 0) - (raw.reusedRolls ?? 0),
+            colorLines: lines,
           })
           .subscribe({
             next: (rows) => {
@@ -629,14 +718,16 @@ export class CutDialog {
       // rolls, and sending both would describe the same fabric twice.
       ...(raw.entryMode === 'SUMMARY'
         ? {
-            totalRolls: raw.totalRolls,
-            reusedRolls: raw.reusedRolls ?? 0,
-            totalWeight: raw.totalWeight,
+            // A run cut by colour is the sum of its lines; the server adds them
+            // up itself, so these are sent only for a run that is not.
+            totalRolls: names ? null : raw.totalRolls,
+            reusedRolls: names ? null : (raw.reusedRolls ?? 0),
+            totalWeight: names ? this.colorTotals().weight : raw.totalWeight,
             // A derby run lays out no marker — its ribbing is weighed, not
             // counted — so it states no layers, and its عجز is not asked for.
             wasteWeight: derby ? 0 : (raw.wasteWeight ?? 0),
             totalLayers: derby ? null : raw.totalLayers,
-            fabricColorId: names ? raw.fabricColorId : null,
+            colorLines: names ? this.colorLineRequests() : [],
           }
         : {}),
     };

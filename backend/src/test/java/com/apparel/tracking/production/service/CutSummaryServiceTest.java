@@ -6,6 +6,7 @@ import static org.mockito.ArgumentMatchers.any;
 import static org.mockito.ArgumentMatchers.eq;
 import static org.mockito.ArgumentMatchers.isNull;
 import static org.mockito.Mockito.never;
+import static org.mockito.Mockito.times;
 import static org.mockito.Mockito.verify;
 import static org.mockito.Mockito.when;
 
@@ -19,6 +20,7 @@ import com.apparel.tracking.fabric.domain.FabricColor;
 import com.apparel.tracking.fabric.domain.FabricIntake;
 import com.apparel.tracking.fabric.domain.FabricIntakeColor;
 import com.apparel.tracking.fabric.domain.FabricType;
+import com.apparel.tracking.fabric.repository.FabricColorRepository;
 import com.apparel.tracking.fabric.repository.FabricIntakeRepository;
 import com.apparel.tracking.production.domain.Cut;
 import com.apparel.tracking.production.domain.CutEntryMode;
@@ -40,7 +42,8 @@ import org.mockito.quality.Strictness;
  *
  * <p>A main run takes it off the shelf. A secondary run does not: it is cut from
  * the remnants of the rolls the main run already drew, so drawing again would
- * take the same fabric from the batches twice.
+ * take the same fabric from the batches twice — unless it names a colour, and is
+ * then drawn down that colour's batches like any other run.
  */
 @ExtendWith(MockitoExtension.class)
 @MockitoSettings(strictness = Strictness.LENIENT)
@@ -54,6 +57,7 @@ class CutSummaryServiceTest {
 
     @Mock private CutFabricDrawRepository draws;
     @Mock private FabricIntakeRepository intakes;
+    @Mock private FabricColorRepository colors;
     @Mock private CutRepository cuts;
 
     private CutSummaryService service;
@@ -61,11 +65,13 @@ class CutSummaryServiceTest {
 
     @BeforeEach
     void setUp() {
-        service = new CutSummaryService(draws, intakes, cuts);
+        service = new CutSummaryService(draws, intakes, colors, cuts);
 
         cotton = new FabricType();
         cotton.setId(TYPE_ID);
         cotton.setNameAr("قطن");
+
+        when(colors.findById(NAVY_ID)).thenReturn(java.util.Optional.of(navy()));
 
         when(cuts.secondaryWeightCharged(any(), any())).thenReturn(BigDecimal.ZERO);
         when(intakes.openBatchesOldestFirst(eq(TYPE_ID), any(Boolean.class)))
@@ -74,14 +80,15 @@ class CutSummaryServiceTest {
         when(draws.weightTakenOfColor(any(), any(), any())).thenReturn(BigDecimal.ZERO);
     }
 
-    /** A derby batch of one colour, with as much of it as the tests need. */
-    private FabricIntake derbyBatch(String quantity, String navyQuantity) {
+    /**
+     * A derby batch holding some navy. {@code navyQuantity} null puts navy on the
+     * batch without saying how much of it there is — which the breakdown allows.
+     */
+    private FabricIntake derbyBatch(Long id, String quantity, String navyQuantity) {
         FabricIntake batch = batch(quantity, 50);
-        batch.setId(BATCH_ID);
+        batch.setId(id);
         batch.setDerby(new Derby());
-        if (navyQuantity != null) {
-            batch.getColorBreakdown().add(colorRow(batch, navy(), navyQuantity));
-        }
+        batch.getColorBreakdown().add(colorRow(batch, navy(), navyQuantity));
         return batch;
     }
 
@@ -89,7 +96,15 @@ class CutSummaryServiceTest {
         FabricColor color = new FabricColor();
         color.setId(NAVY_ID);
         color.setNameAr("كحلي");
+        color.setFabricType(cotton);
         return color;
+    }
+
+    /** A derby run of {@code weight}, cut in navy. */
+    private Cut derbyRun(String weight) {
+        Cut run = cut(CHILD_ID, CutType.DERBY, weight, mainCut("200.000"));
+        run.setFabricColor(navy());
+        return run;
     }
 
     private FabricIntakeColor colorRow(FabricIntake batch, FabricColor color, String quantity) {
@@ -209,56 +224,69 @@ class CutSummaryServiceTest {
     }
 
     @Test
-    void takesADerbyRunOffTheBatchItNames() {
-        // Derby is kept and asked for by colour, so the run says which purchase
-        // it left rather than having the oldest one guessed for it.
-        FabricIntake batch = derbyBatch("40.000", "25.000");
-        Cut run = cut(CHILD_ID, CutType.DERBY, "7.500", mainCut("200.000"));
-        run.setFabricIntake(batch);
-        run.setFabricColor(navy());
+    void walksOneColoursBatchesOldestFirst() {
+        // 5 kg of navy on the older batch, 8 on the next: a 12 kg run takes all
+        // of the first and spills the rest into the second.
+        FabricIntake older = derbyBatch(BATCH_ID, "40.000", "5.000");
+        FabricIntake newer = derbyBatch(78L, "40.000", "8.000");
+        when(intakes.openBatchesOldestFirst(eq(TYPE_ID), eq(true)))
+                .thenReturn(List.of(older, newer));
 
-        service.apply(run);
+        service.apply(derbyRun("12.000"));
 
-        verify(draws).save(any(CutFabricDraw.class));
-        assertThat(batch.getConsumedQuantity()).isEqualByComparingTo("7.500");
+        verify(draws, times(2)).save(any(CutFabricDraw.class));
+        assertThat(older.getConsumedQuantity()).isEqualByComparingTo("5.000");
+        assertThat(newer.getConsumedQuantity()).isEqualByComparingTo("7.000");
     }
 
     @Test
-    void refusesMoreOfAColourThanTheBatchHoldsOfIt() {
-        FabricIntake batch = derbyBatch("40.000", "5.000");
+    void walksPastABatchThatNeverListedTheColour() {
+        // A batch that does not say it holds navy cannot be said to hold any.
+        FabricIntake plain = batch("40.000", 50);
+        plain.setId(BATCH_ID);
+        plain.setDerby(new Derby());
+        FabricIntake navyBatch = derbyBatch(78L, "40.000", "9.000");
+        when(intakes.openBatchesOldestFirst(eq(TYPE_ID), eq(true)))
+                .thenReturn(List.of(plain, navyBatch));
+
+        service.apply(derbyRun("7.500"));
+
+        assertThat(plain.getConsumedQuantity()).isEqualByComparingTo("0");
+        assertThat(navyBatch.getConsumedQuantity()).isEqualByComparingTo("7.500");
+    }
+
+    @Test
+    void countsWhatEarlierRunsAlreadyTookOfThatColour() {
+        FabricIntake batch = derbyBatch(BATCH_ID, "40.000", "9.000");
+        when(intakes.openBatchesOldestFirst(eq(TYPE_ID), eq(true))).thenReturn(List.of(batch));
         when(draws.weightTakenOfColor(eq(BATCH_ID), eq(NAVY_ID), any()))
-                .thenReturn(new BigDecimal("2.000"));
-        Cut run = cut(CHILD_ID, CutType.DERBY, "7.500", mainCut("200.000"));
-        run.setFabricIntake(batch);
-        run.setFabricColor(navy());
+                .thenReturn(new BigDecimal("6.000"));
 
-        // 5 kg navy on the batch, 2 already cut, and this run wants 7.5 more.
-        assertThatThrownBy(() -> service.apply(run))
+        // 9 kg navy, 6 already cut: only 3 left, and no other batch holds any.
+        assertThatThrownBy(() -> service.apply(derbyRun("7.500")))
                 .isInstanceOf(BusinessRuleException.class)
-                .hasMessageContaining("already cut");
+                .hasMessageContaining("كحلي");
     }
 
     @Test
-    void leavesAColourAloneWhenTheBreakdownNeverSaidHowMuchOfItThereIs() {
-        // The breakdown is a soft record: a colour given as a roll count says
-        // nothing about the kilos, so only the batch total can be checked.
-        FabricIntake batch = derbyBatch("40.000", null);
-        batch.getColorBreakdown().add(colorRow(batch, navy(), null));
-        Cut run = cut(CHILD_ID, CutType.DERBY, "7.500", mainCut("200.000"));
-        run.setFabricIntake(batch);
-        run.setFabricColor(navy());
+    void takesTheWholeBatchWhenTheBreakdownNeverWeighedTheColour() {
+        // The breakdown is soft: a colour given as a roll count says nothing about
+        // the kilos, so the batch's own remainder is the only cap there is.
+        FabricIntake batch = derbyBatch(BATCH_ID, "40.000", null);
+        when(intakes.openBatchesOldestFirst(eq(TYPE_ID), eq(true))).thenReturn(List.of(batch));
 
-        service.apply(run);
+        service.apply(derbyRun("30.000"));
 
-        verify(draws).save(any(CutFabricDraw.class));
+        assertThat(batch.getConsumedQuantity()).isEqualByComparingTo("30.000");
     }
 
     @Test
-    void spendsASecondaryRunFromItsOwnBatchWhenItNamesOne() {
-        FabricIntake batch = batch("500.000", 50);
-        batch.setId(BATCH_ID);
+    void drawsASecondaryRunFromTheShelfWhenItNamesAColour() {
+        FabricIntake batch = derbyBatch(BATCH_ID, "500.000", "80.000");
+        batch.setDerby(null);
+        when(intakes.openBatchesOldestFirst(eq(TYPE_ID), eq(false))).thenReturn(List.of(batch));
         Cut run = cut(CHILD_ID, CutType.SECONDARY, "50.000", mainCut("200.000"));
-        run.setFabricIntake(batch);
+        run.setFabricColor(navy());
 
         service.apply(run);
 
@@ -269,51 +297,33 @@ class CutSummaryServiceTest {
     }
 
     @Test
-    void refusesADerbyRunThatNamesNoBatch() {
+    void refusesADerbyRunThatNamesNoColour() {
         Cut run = cut(CHILD_ID, CutType.DERBY, "7.500", mainCut("200.000"));
 
-        assertThatThrownBy(() -> service.assignSource(run, null, null))
-                .isInstanceOf(BusinessRuleException.class)
-                .hasMessageContaining("derby batch");
-    }
-
-    @Test
-    void refusesARunCutFromTheWrongPool() {
-        when(intakes.findById(BATCH_ID)).thenReturn(java.util.Optional.of(batch("500.000", 50)));
-        Cut run = cut(CHILD_ID, CutType.DERBY, "7.500", mainCut("200.000"));
-
-        assertThatThrownBy(() -> service.assignSource(run, BATCH_ID, null))
-                .isInstanceOf(BusinessRuleException.class)
-                .hasMessageContaining("derby batch");
-    }
-
-    @Test
-    void asksWhichColourOfTheBatchOnceTheBatchSaysWhatItHolds() {
-        when(intakes.findById(BATCH_ID)).thenReturn(java.util.Optional.of(derbyBatch("40.000", "25.000")));
-        Cut run = cut(CHILD_ID, CutType.DERBY, "7.500", mainCut("200.000"));
-
-        assertThatThrownBy(() -> service.assignSource(run, BATCH_ID, null))
+        assertThatThrownBy(() -> service.assignSource(run, null))
                 .isInstanceOf(BusinessRuleException.class)
                 .hasMessageContaining("which colour");
     }
 
     @Test
-    void refusesAColourTheNamedBatchDoesNotHold() {
-        when(intakes.findById(BATCH_ID)).thenReturn(java.util.Optional.of(derbyBatch("40.000", "25.000")));
+    void refusesAColourOfAnotherFabric() {
+        FabricType linen = new FabricType();
+        linen.setId(9L);
+        linen.setNameAr("كتان");
         Cut run = cut(CHILD_ID, CutType.DERBY, "7.500", mainCut("200.000"));
+        run.setFabricType(linen);
 
-        assertThatThrownBy(() -> service.assignSource(run, BATCH_ID, 999L))
+        assertThatThrownBy(() -> service.assignSource(run, NAVY_ID))
                 .isInstanceOf(BusinessRuleException.class)
-                .hasMessageContaining("no fabric of that colour");
+                .hasMessageContaining("not of the fabric");
     }
 
     @Test
-    void takesTheFabricTypeFromTheBatchWhenTheRunNeverNamedOne() {
-        when(intakes.findById(BATCH_ID)).thenReturn(java.util.Optional.of(derbyBatch("40.000", "25.000")));
+    void takesTheFabricTypeFromTheColourWhenTheRunNeverNamedOne() {
         Cut run = cut(CHILD_ID, CutType.DERBY, "7.500", mainCut("200.000"));
         run.setFabricType(null);
 
-        service.assignSource(run, BATCH_ID, NAVY_ID);
+        service.assignSource(run, NAVY_ID);
 
         assertThat(run.getFabricType()).isEqualTo(cotton);
         assertThat(run.getFabricColor().getId()).isEqualTo(NAVY_ID);

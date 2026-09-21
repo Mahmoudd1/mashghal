@@ -294,44 +294,30 @@
         </mat-button-toggle-group>
       }
 
-      <!-- Which colour, off which purchase: the way derby is bought, kept and
-           asked for, so it is the way a run that lays it out is written down. -->
+      <!-- The colour is all the run says about where its fabric came from: the
+           batches holding it are walked oldest first, exactly as a main run's
+           fabric is, and the preview below shows which ones it landed on. -->
       @if (namesBatch()) {
-        <div class="color-entry-row">
-          <mat-form-field appearance="outline">
-            <mat-label>{{ 'fabric.color' | translate }}</mat-label>
-            <mat-select formControlName="fabricColorId" (selectionChange)="onColorChange()">
-              @for (color of batchColors(); track color.id) {
-                <mat-option [value]="color.id">{{ color.nameAr }}</mat-option>
-              }
-            </mat-select>
-            @if (batchColors().length === 0) {
-              <mat-hint>{{ 'cut.noBatchColors' | translate }}</mat-hint>
+        <mat-form-field appearance="outline">
+          <mat-label>{{ 'fabric.color' | translate }}</mat-label>
+          <mat-select formControlName="fabricColorId">
+            @for (color of batchColors(); track color.id) {
+              <mat-option [value]="color.id">
+                {{ color.nameAr }}
+                @if (color.remaining > 0) {
+                  <span class="option-hint">{{ color.remaining | number: '1.0-3' }}</span>
+                }
+              </mat-option>
             }
-          </mat-form-field>
+          </mat-select>
+          <mat-hint>
+            {{
+              (batchColors().length === 0 ? 'cut.noBatchColors' : 'cut.colorDrawHint') | translate
+            }}
+          </mat-hint>
+        </mat-form-field>
 
-          <mat-form-field appearance="outline">
-            <mat-label>{{ 'cut.batchDate' | translate }}</mat-label>
-            <mat-select formControlName="fabricIntakeId">
-              @for (batch of batchOptions(); track batch.id) {
-                <mat-option [value]="batch.id">
-                  <span class="numeric">{{ batch.intakeDate | date: 'dd/MM/yyyy' }}</span>
-                  <span class="option-hint">
-                    {{ remainingOfColor(batch) ?? batch.remainingQuantity | number: '1.0-3' }}
-                  </span>
-                </mat-option>
-              }
-            </mat-select>
-            <mat-hint>{{ 'cut.batchDateHint' | translate }}</mat-hint>
-          </mat-form-field>
-        </div>
-
-        @if (missingBatch()) {
-          <p class="soft-warning soft-warning-strong">
-            <mat-icon inline>warning</mat-icon>
-            {{ 'cut.batchRequired' | translate }}
-          </p>
-        } @else if (missingBatchColor()) {
+        @if (missingBatchColor()) {
           <p class="soft-warning soft-warning-strong">
             <mat-icon inline>warning</mat-icon>
             {{ 'cut.batchColorRequired' | translate }}

@@ -25,12 +25,11 @@ import jakarta.validation.constraints.Size;
  * @param wasteWeight     the عجز: the part of that weight binned rather than cut
  * @param reusedRolls     how many of {@code totalRolls} were already open, and so
  *                        were taken off a batch by an earlier cut
- * @param fabricIntakeId  the batch this run was cut from, naming it outright
- *                        instead of drawing oldest-batch-first. Required for a
- *                        DERBY run, which is asked for by colour off a purchase;
+ * @param fabricColorId   the colour this run was cut in, drawing its weight from
+ *                        the batches holding that colour, oldest first. Required
+ *                        for a DERBY run, which is bought and asked for by colour;
  *                        optional for a SECONDARY one, which otherwise spends the
  *                        fabric its main cut already took
- * @param fabricColorId   which colour of that batch
  */
 public record CutRequest(
         @NotBlank @Size(max = 64) String cutNumber,
@@ -41,7 +40,8 @@ public record CutRequest(
         // The model this cut is for. A number that does not exist yet is created,
         // because opening a cut is normally the moment a model comes into being.
         // Ignored for a SECONDARY or DERBY run: it is cut out of a main run, so its
-        // model and its marker are inherited from the cut it names as its parent.
+        // model, marker, description and label are inherited from the cut it names
+        // as its parent.
         @Size(max = 64) String modelNumber,
         @Size(max = 128) String modelNameAr,
         Long modelSewingBranchId,
@@ -61,7 +61,6 @@ public record CutRequest(
         @DecimalMin("0.001") @Digits(integer = 11, fraction = 3) BigDecimal totalWeight,
         @DecimalMin("0.0") @Digits(integer = 11, fraction = 3) BigDecimal wasteWeight,
         @Min(1) Integer totalLayers,
-        Long fabricIntakeId,
         Long fabricColorId) {
 
     /** DETAILED unless the request says otherwise, so existing callers are unchanged. */

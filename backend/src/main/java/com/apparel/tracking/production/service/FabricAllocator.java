@@ -21,6 +21,11 @@ import com.apparel.tracking.fabric.domain.FabricIntake;
  * weight on very few remaining rolls, or the reverse. Tying them together would
  * invent a shortage that is not there.
  *
+ * <p>What a batch may give is passed in as {@link Headroom} rather than read off
+ * the batch, because it is not always the whole batch. A run cut in one colour
+ * takes only what that batch holds of that colour, and spills into the next batch
+ * holding it — the same walk, down a narrower shelf.
+ *
  * <p>Pure arithmetic: nothing here touches a batch. The caller applies the
  * result, which is also what gets written down so the draw can be reversed
  * exactly rather than recalculated later against different stock.
@@ -30,16 +35,39 @@ public final class FabricAllocator {
     /** One batch's share of a draw. */
     public record Share(FabricIntake intake, BigDecimal weight, int rolls) {}
 
+    /**
+     * The most one batch may give this draw.
+     *
+     * <p>For an ordinary run that is everything the batch has left. For a run cut
+     * in one colour the weight narrows to what the batch holds of that colour;
+     * the roll count does not, because the colour breakdown is a soft record that
+     * need not add up to the batch, and capping rolls by it would invent a
+     * shortage the shelf does not have.
+     */
+    public record Headroom(FabricIntake intake, BigDecimal weight, int rolls) {
+
+        public static Headroom wholeBatch(FabricIntake intake) {
+            return new Headroom(intake, intake.remainingQuantity(), intake.remainingRolls());
+        }
+    }
+
     private FabricAllocator() {
     }
 
+    /** Every batch may give everything it has left. */
+    public static List<Share> allocate(List<FabricIntake> batches, BigDecimal weight, int rolls) {
+        return allocate(batches.stream().map(Headroom::wholeBatch).toList(), weight, rolls, "fabric");
+    }
+
     /**
-     * @param batches oldest first; the caller decides which pool they come from
-     * @param weight  fabric to take off the shelf, waste included
-     * @param rolls   rolls to take, not counting any that were already open
+     * @param headroom oldest first; the caller decides the pool and the caps
+     * @param weight   fabric to take off the shelf, waste included
+     * @param rolls    rolls to take, not counting any that were already open
+     * @param of       what came up short, for the message: "fabric", or a colour
      * @throws BusinessRuleException when the batches together cannot cover it
      */
-    public static List<Share> allocate(List<FabricIntake> batches, BigDecimal weight, int rolls) {
+    public static List<Share> allocate(
+            List<Headroom> headroom, BigDecimal weight, int rolls, String of) {
         if (weight.signum() <= 0) {
             throw new BusinessRuleException("cut_summary_no_weight",
                     "Enter how much fabric this cut used");
@@ -49,31 +77,31 @@ public final class FabricAllocator {
         BigDecimal weightLeft = weight;
         int rollsLeft = rolls;
 
-        for (FabricIntake batch : batches) {
+        for (Headroom available : headroom) {
             if (weightLeft.signum() <= 0 && rollsLeft <= 0) {
                 break;
             }
 
-            BigDecimal fromBatch = weightLeft.min(batch.remainingQuantity()).max(BigDecimal.ZERO);
-            int rollsFromBatch = Math.max(0, Math.min(rollsLeft, batch.remainingRolls()));
+            BigDecimal fromBatch = weightLeft.min(available.weight()).max(BigDecimal.ZERO);
+            int rollsFromBatch = Math.max(0, Math.min(rollsLeft, available.rolls()));
             if (fromBatch.signum() <= 0 && rollsFromBatch == 0) {
                 continue;
             }
 
-            shares.add(new Share(batch, fromBatch, rollsFromBatch));
+            shares.add(new Share(available.intake(), fromBatch, rollsFromBatch));
             weightLeft = weightLeft.subtract(fromBatch);
             rollsLeft -= rollsFromBatch;
         }
 
         if (weightLeft.signum() > 0) {
             throw new BusinessRuleException("cut_summary_insufficient_fabric",
-                    "This fabric's batches are %s short of the %s the cut used"
-                            .formatted(weightLeft, weight));
+                    "The batches holding %s are %s short of the %s the cut used"
+                            .formatted(of, weightLeft, weight));
         }
         if (rollsLeft > 0) {
             throw new BusinessRuleException("cut_summary_insufficient_rolls",
-                    "This fabric's batches are %d rolls short of the %d the cut used"
-                            .formatted(rollsLeft, rolls));
+                    "The batches holding %s are %d rolls short of the %d the cut used"
+                            .formatted(of, rollsLeft, rolls));
         }
         return shares;
     }

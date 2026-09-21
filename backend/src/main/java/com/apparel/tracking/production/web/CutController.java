@@ -94,7 +94,6 @@ public class CutController {
                 request.totalWeight(),
                 request.wasteWeight() == null ? BigDecimal.ZERO : request.wasteWeight(),
                 request.newRolls(),
-                request.fabricIntakeId(),
                 request.fabricColorId());
     }
 
